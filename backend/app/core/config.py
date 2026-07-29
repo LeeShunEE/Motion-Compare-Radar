@@ -85,6 +85,7 @@ class Settings(BaseSettings):
     public_assets_path: Path = Path(
         os.getenv("PUBLIC_ASSETS_PATH", str(_BACKEND_ROOT / ".." / "frontend" / "public"))
     )
+    max_public_asset_bytes: int = 100 * 1024 * 1024
 
     # 背景媒体零拷贝（方案 B）：worker 是否已将 backend_storage 只读挂载到其
     # publicDir/_user_media。这是**部署事实**，必须由 backend 经配置得知——backend

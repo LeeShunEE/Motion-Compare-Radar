@@ -51,6 +51,7 @@ services:
       JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
       JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-1440}
       JWT_REFRESH_EXPIRE_MINUTES: ${JWT_REFRESH_EXPIRE_MINUTES:-10080}
+      INITIAL_ADMIN_EMAIL: ${INITIAL_ADMIN_EMAIL:-}
       # Storage configuration
       STORAGE_ROOT: /app/storage
       # Render worker configuration
@@ -61,6 +62,7 @@ services:
       RENDER_CALLBACK_TOKEN_SECRET_STRING: ${RENDER_CALLBACK_TOKEN:-dev-only-render-callback-token}
       # Public assets path (frontend public directory mounted for asset listing)
       PUBLIC_ASSETS_PATH: /app/public_assets
+      MAX_PUBLIC_ASSET_BYTES: ${MAX_PUBLIC_ASSET_BYTES:-104857600}
       # 背景媒体零拷贝（方案 B）：声明 worker 已将 backend_storage 只读挂载到其
       # publicDir/_user_media（见下方 render-worker volumes）。backend 据此直接产出
       # _user_media 相对路径而非复制进 _render_tmp。backend 与 worker 是不同容器，
@@ -82,9 +84,8 @@ services:
       RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-onboarding@resend.dev}
     volumes:
       - backend_storage:/app/storage
-      # Public assets: frontend/public mounted for backend to list music/silhouette files
-      # Must be writable for Docker to create _render_tmp mountpoint
-      - ../frontend/public:/app/public_assets
+      # Public assets are managed online by administrators and persist independently.
+      - public_assets:/app/public_assets
       # Render tmp: writable subdir for silhouette rewrite (worker reads via staticFile)
       - render_tmp:/app/public_assets/_render_tmp
     depends_on:
@@ -123,6 +124,9 @@ services:
     environment:
       # Internal API URL (for server-side calls)
       NEXT_PUBLIC_API_URL: ${API_PUBLIC_URL:-http://localhost:8000}
+      ADMIN_PATH_SECRET_STRING: ${ADMIN_PATH_SECRET_STRING:?ADMIN_PATH_SECRET_STRING is required}
+    volumes:
+      - public_assets:/app/public:ro
     depends_on:
       backend:
         condition: service_healthy
@@ -157,6 +161,7 @@ services:
     volumes:
       - render_outputs:/app/output
       - backend_storage:/app/storage  # 共享 backend storage，让产物写入后可被 backend 读取
+      - public_assets:/app/public:ro
       # Render tmp: shared with backend for silhouette rewrite temporary files
       # Mounted to public subdir so staticFile() can read them
       - render_tmp:/app/public/_render_tmp
@@ -196,6 +201,8 @@ volumes:
     name: radar_render_outputs
   render_tmp:
     name: radar_render_tmp
+  public_assets:
+    name: radar_public_assets
 
 # ============================================
 # Network (optional, Coolify creates default)

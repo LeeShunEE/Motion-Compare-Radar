@@ -50,6 +50,7 @@ Coolify 是自托管部署平台，自动处理反向代理、SSL 和域名绑�
 | `POSTGRES_PASSWORD` | 数据库密码 | `your-strong-password` |
 | `JWT_SECRET_STRING` | JWT 密钥 | `min-32-random-characters` |
 | `API_PUBLIC_URL` | 对外 API 地址 | `https://api.your-domain.com` |
+| `ADMIN_PATH_SECRET_STRING` | 管理入口的 24-96 位 URL-safe 随机路径 | `ops-随机长串` |
 
 **可选变量：**
 
@@ -208,6 +209,8 @@ docker compose exec backend alembic current
 | `WORKER_BASE_URL` | ✅ | Render Worker 地址 |
 | `RENDER_CONCURRENCY` | — | 并发渲染数（默认 2） |
 | `RENDER_TIMEOUT_SECONDS` | — | 渲染超时（默认 600） |
+| `INITIAL_ADMIN_EMAIL` | — | 数据库无管理员时可完成首次引导的邮箱 |
+| `MAX_PUBLIC_ASSET_BYTES` | — | 单个公共资源上限（默认 100 MiB） |
 
 ### OAuth 配置（可选）
 
@@ -227,6 +230,7 @@ docker compose exec backend alembic current
 | 变量 | 说明 |
 |------|------|
 | `NEXT_PUBLIC_API_URL` | API 公开地址 |
+| `ADMIN_PATH_SECRET_STRING` | 运行时管理入口；不使用 `NEXT_PUBLIC_` 前缀 |
 
 ### 资源限制（可选，compose 单机语义）
 
@@ -251,6 +255,7 @@ docker compose exec backend alembic current
 | `postgres_data` | PostgreSQL 数据 | 定期备份 |
 | `backend_storage` | 用户文件 + 渲染产物 | 定期备份 |
 | `render_outputs` | 渲染工作器输出 | 可清理 |
+| `public_assets` | 管理员上传的公共剪影与音乐 | 定期备份，不从 Git seed |
 
 ---
 

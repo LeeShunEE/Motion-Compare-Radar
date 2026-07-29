@@ -1,9 +1,11 @@
 """管理员 API 请求与响应契约。"""
 
+from datetime import datetime
 from enum import StrEnum
 
 from pydantic import BaseModel, EmailStr
 
+from app.models.public_asset import PublicAsset
 from app.models.user import User
 
 
@@ -32,4 +34,24 @@ class AdminSessionResponse(BaseModel):
             username=user.username,
             email=user.email,
             capabilities=list(AdminCapability),
+        )
+
+
+class AdminAssetResponse(BaseModel):
+    """管理员资源列表和写操作响应。"""
+
+    category: str
+    name: str
+    path: str
+    size_bytes: int
+    modified_at: datetime
+
+    @classmethod
+    def from_domain(cls, asset: PublicAsset) -> "AdminAssetResponse":
+        return cls(
+            category=asset.category.value,
+            name=asset.name,
+            path=asset.path,
+            size_bytes=asset.size_bytes,
+            modified_at=asset.modified_at,
         )

@@ -63,6 +63,13 @@ class InvalidFileError(BusinessError):
     code = "invalid_file"
 
 
+class PublicAssetConflictError(BusinessError):
+    """同名公共资源存在且未显式允许覆盖。"""
+
+    status_code = 409
+    code = "asset_conflict"
+
+
 class StoredFileNotFoundError(BusinessError):
     """用户存储中不存在该文件。"""
 

@@ -345,8 +345,71 @@ export interface AdminSession {
   capabilities: string[];
 }
 
+export type AssetCategory = "silhouettes" | "music";
+
+export interface AdminAsset {
+  category: AssetCategory;
+  name: string;
+  path: string;
+  size_bytes: number;
+  modified_at: string;
+}
+
+function uploadAdminAsset(
+  category: AssetCategory,
+  file: File,
+  overwrite: boolean,
+  onProgress?: (percent: number) => void,
+): Promise<AdminAsset> {
+  return new Promise((resolve, reject) => {
+    const data = new FormData();
+    data.append("file", file);
+    const xhr = new XMLHttpRequest();
+    xhr.open(
+      "POST",
+      `${API_BASE}/api/v1/admin/assets/${category}?overwrite=${overwrite}`,
+    );
+    const token = getAccessToken();
+    if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable && onProgress) {
+        onProgress(Math.round((event.loaded / event.total) * 100));
+      }
+    };
+    xhr.onload = () => {
+      const body = JSON.parse(xhr.responseText || "null") as AdminAsset | {
+        error?: string;
+        code?: string;
+      } | null;
+      if (xhr.status >= 200 && xhr.status < 300 && body) {
+        resolve(body as AdminAsset);
+        return;
+      }
+      const errorBody = body as { error?: string; code?: string } | null;
+      reject(
+        new ApiError(errorBody?.error ?? "公共资源上传失败", {
+          code: errorBody?.code,
+          status: xhr.status,
+        }),
+      );
+    };
+    xhr.onerror = () => reject(new Error("公共资源上传失败"));
+    xhr.send(data);
+  });
+}
+
 export const admin = {
   session: () => authFetch<AdminSession>("/api/v1/admin/me"),
+  listAssets: (category: AssetCategory) =>
+    authFetch<AdminAsset[]>(
+      `/api/v1/admin/assets?category=${encodeURIComponent(category)}`,
+    ),
+  uploadAsset: uploadAdminAsset,
+  deleteAsset: (category: AssetCategory, name: string) =>
+    authFetch<void>(
+      `/api/v1/admin/assets/${category}/${encodeURIComponent(name)}`,
+      { method: "DELETE" },
+    ),
 };
 
 export interface TaskResponse {
