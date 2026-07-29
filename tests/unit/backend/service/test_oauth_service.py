@@ -74,6 +74,7 @@ def _make_service(
     service._oauth_dao = oauth_dao
     service._user_dao = user_dao
     service._oauth_state_dao = oauth_state_dao
+    service._audit = AsyncMock()
     return service
 
 

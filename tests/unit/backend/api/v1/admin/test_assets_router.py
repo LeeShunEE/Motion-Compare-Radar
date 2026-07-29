@@ -2,7 +2,9 @@
 
 from collections.abc import Iterator
 from datetime import UTC, datetime
+from importlib import import_module
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -12,6 +14,8 @@ from app.core.config import settings
 from app.main import app
 from app.models.user import User
 from app.service.queue_service import render_queue
+
+assets_router_module = import_module("app.api.v1.admin.assets_router")
 
 
 @pytest.fixture
@@ -27,6 +31,9 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClie
     monkeypatch.setattr(settings, "max_public_asset_bytes", 8)
     monkeypatch.setattr(settings, "render_queue_autostart", False)
     render_queue.reset()
+    audit = MagicMock()
+    audit.record = AsyncMock()
+    monkeypatch.setattr(assets_router_module, "AuditService", lambda _session: audit)
     app.dependency_overrides[get_current_admin] = lambda: admin
     with TestClient(app) as test_client:
         yield test_client

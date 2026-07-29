@@ -106,4 +106,41 @@ describe("admin api client", () => {
       code: "asset_conflict",
     });
   });
+
+  it("covers user management request contracts", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ items: [], total: 0, page: 1, page_size: 50 }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await admin.listUsers({ search: "alice", isAdmin: true, isActive: false, isVerified: true, page: 2, pageSize: 20 });
+    expect(fetchMock.mock.calls.at(-1)![0]).toContain("is_active=false");
+    await admin.listUsers();
+    expect(fetchMock.mock.calls.at(-1)![0]).toContain("page_size=50");
+    await admin.getUser(9);
+    await admin.setUserRole(9, true);
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe("PATCH");
+    await admin.setUserStatus(9, false);
+    expect(fetchMock.mock.calls.at(-1)![1].body).toContain("false");
+  });
+
+  it("covers audit cursor and filter request contracts", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ items: [], next_cursor: null }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await admin.listAuditEvents({ beforeId: 12, limit: 20, action: "render.submitted", success: false });
+    expect(fetchMock.mock.calls.at(-1)![0]).toContain("success=false");
+    await admin.listAuditEvents();
+    expect(fetchMock.mock.calls.at(-1)![0]).toContain("limit=50");
+    await admin.listUserActivity(9, 4);
+    expect(fetchMock.mock.calls.at(-1)![0]).toContain("before_id=4");
+    await admin.listUserActivity(9);
+    expect(fetchMock.mock.calls.at(-1)![0]).toMatch(/activity$/);
+  });
 });

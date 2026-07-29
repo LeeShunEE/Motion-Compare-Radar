@@ -355,6 +355,77 @@ export interface AdminAsset {
   modified_at: string;
 }
 
+export interface AdminUser {
+  id: number;
+  username: string | null;
+  email: string;
+  is_verified: boolean;
+  is_admin: boolean;
+  is_active: boolean;
+  last_login_at: string | null;
+  created_at: string;
+}
+
+export interface AdminUserList {
+  items: AdminUser[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface AdminUserDetail {
+  user: AdminUser;
+  usage: {
+    upload_count: number;
+    upload_bytes: number;
+    output_bytes: number;
+    render_total: number;
+    render_done: number;
+    render_failed: number;
+    render_canceled: number;
+    render_success_rate: number;
+    activity_count: number;
+    storage_partial: boolean;
+  };
+}
+
+export interface AdminAuditEvent {
+  id: number;
+  actor_user_id: number | null;
+  subject_user_id: number | null;
+  action: string;
+  resource_type: string | null;
+  resource_id: string | null;
+  success: boolean;
+  metadata: Record<string, string | number | boolean | null>;
+  created_at: string;
+}
+
+export interface AdminAuditEventList {
+  items: AdminAuditEvent[];
+  next_cursor: number | null;
+}
+
+export interface AdminUserFilters {
+  search?: string;
+  isAdmin?: boolean;
+  isActive?: boolean;
+  isVerified?: boolean;
+  page?: number;
+  pageSize?: number;
+}
+
+function adminUserQuery(filters: AdminUserFilters): string {
+  const query = new URLSearchParams();
+  if (filters.search) query.set("search", filters.search);
+  if (filters.isAdmin !== undefined) query.set("is_admin", String(filters.isAdmin));
+  if (filters.isActive !== undefined) query.set("is_active", String(filters.isActive));
+  if (filters.isVerified !== undefined) query.set("is_verified", String(filters.isVerified));
+  query.set("page", String(filters.page ?? 1));
+  query.set("page_size", String(filters.pageSize ?? 50));
+  return query.toString();
+}
+
 function uploadAdminAsset(
   category: AssetCategory,
   file: File,
@@ -410,6 +481,32 @@ export const admin = {
       `/api/v1/admin/assets/${category}/${encodeURIComponent(name)}`,
       { method: "DELETE" },
     ),
+  listUsers: (filters: AdminUserFilters = {}) =>
+    authFetch<AdminUserList>(`/api/v1/admin/users?${adminUserQuery(filters)}`),
+  getUser: (userId: number) =>
+    authFetch<AdminUserDetail>(`/api/v1/admin/users/${userId}`),
+  setUserRole: (userId: number, isAdmin: boolean) =>
+    authFetch<AdminUser>(`/api/v1/admin/users/${userId}/role`, {
+      method: "PATCH",
+      body: JSON.stringify({ is_admin: isAdmin }),
+    }),
+  setUserStatus: (userId: number, isActive: boolean) =>
+    authFetch<AdminUser>(`/api/v1/admin/users/${userId}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ is_active: isActive }),
+    }),
+  listAuditEvents: (options: { beforeId?: number; limit?: number; action?: string; success?: boolean } = {}) => {
+    const query = new URLSearchParams();
+    if (options.beforeId !== undefined) query.set("before_id", String(options.beforeId));
+    if (options.action) query.set("action", options.action);
+    if (options.success !== undefined) query.set("success", String(options.success));
+    query.set("limit", String(options.limit ?? 50));
+    return authFetch<AdminAuditEventList>(`/api/v1/admin/audit-events?${query}`);
+  },
+  listUserActivity: (userId: number, beforeId?: number) => {
+    const query = beforeId === undefined ? "" : `?before_id=${beforeId}`;
+    return authFetch<AdminAuditEventList>(`/api/v1/admin/users/${userId}/activity${query}`);
+  },
 };
 
 export interface TaskResponse {

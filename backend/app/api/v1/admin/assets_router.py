@@ -2,11 +2,13 @@
 
 from fastapi import APIRouter, UploadFile, status
 
-from app.api.deps import CurrentAdminDep
+from app.api.deps import CurrentAdminDep, SessionDep
 from app.core.config import settings
+from app.models.audit_event import AuditAction
 from app.models.public_asset import AssetCategory
 from app.schemas.admin import AdminAssetResponse
 from app.service.admin.public_asset_service import PublicAssetService
+from app.service.audit_service import AuditService
 
 router = APIRouter(prefix="/assets")
 
@@ -35,7 +37,8 @@ async def list_assets(
 async def upload_asset(
     category: AssetCategory,
     file: UploadFile,
-    _current_admin: CurrentAdminDep,
+    current_admin: CurrentAdminDep,
+    session: SessionDep,
     *,
     overwrite: bool = False,
 ) -> AdminAssetResponse:
@@ -47,6 +50,17 @@ async def upload_asset(
         data,
         overwrite=overwrite,
     )
+    await AuditService(session).record(
+        AuditAction.ADMIN_ASSET_REPLACED if overwrite else AuditAction.ADMIN_ASSET_CREATED,
+        actor_user_id=current_admin.id,
+        resource_type="public_asset",
+        resource_id=f"{category.value}/{asset.name}",
+        metadata={
+            "category": category.value,
+            "filename": asset.name,
+            "overwrite": overwrite,
+        },
+    )
     return AdminAssetResponse.from_domain(asset)
 
 
@@ -54,7 +68,15 @@ async def upload_asset(
 async def delete_asset(
     category: AssetCategory,
     name: str,
-    _current_admin: CurrentAdminDep,
+    current_admin: CurrentAdminDep,
+    session: SessionDep,
 ) -> None:
     """删除指定公共资源。"""
     _service().delete(category, name)
+    await AuditService(session).record(
+        AuditAction.ADMIN_ASSET_DELETED,
+        actor_user_id=current_admin.id,
+        resource_type="public_asset",
+        resource_id=f"{category.value}/{name}",
+        metadata={"category": category.value, "filename": name},
+    )

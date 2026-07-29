@@ -16,6 +16,7 @@ def _make_service(dao: AsyncMock, verification_dao: AsyncMock = None) -> AuthSer
     service._dao = dao
     if verification_dao:
         service._verification_dao = verification_dao
+    service._audit = AsyncMock()
     return service
 
 
@@ -172,6 +173,7 @@ class TestAuthenticate:
         dao.record_successful_login.assert_awaited_once_with(
             1, initial_admin_email="alice@example.com"
         )
+        service._audit.record.assert_awaited_once()
 
     async def test_authenticate_rejects_disabled_account(self) -> None:
         """停用账号不能换取新 token。"""

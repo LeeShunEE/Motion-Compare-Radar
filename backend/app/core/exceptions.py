@@ -42,6 +42,13 @@ class AdminRequiredError(PermissionDeniedError):
     code = "admin_required"
 
 
+class AdminSafetyError(BusinessError):
+    """会导致管理员锁死或违反自我保护规则的操作。"""
+
+    status_code = 409
+    code = "admin_safety_conflict"
+
+
 class UserExistsError(BusinessError):
     """用户名/邮箱已存在。"""
 

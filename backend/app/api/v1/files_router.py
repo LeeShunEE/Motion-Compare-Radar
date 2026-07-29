@@ -7,6 +7,7 @@ from app.api.deps import CurrentUserDep, SessionDep
 from app.core.config import settings
 from app.core.exceptions import TaskNotFoundError
 from app.dao.render_task_dao import RenderTaskDAO
+from app.models.audit_event import AuditAction
 from app.models.render_task import RenderStatus
 from app.schemas.file import (
     FileListResponse,
@@ -14,6 +15,7 @@ from app.schemas.file import (
     QuotaResponse,
     UploadResponse,
 )
+from app.service.audit_service import AuditService
 from app.service.file_service import FileService
 
 router = APIRouter(prefix="/files", tags=["files"])
@@ -40,11 +42,21 @@ async def list_files(current_user: CurrentUserDep) -> FileListResponse:
 
 @router.post("", response_model=UploadResponse, status_code=status.HTTP_201_CREATED)
 async def upload_file(
-    current_user: CurrentUserDep, file: UploadFile
+    current_user: CurrentUserDep, file: UploadFile, session: SessionDep
 ) -> UploadResponse:
     service = _service()
+    filename = file.filename or ""
+    replaced = service.upload_exists(current_user.id, filename)
     data = await file.read()
-    stored = service.save_upload(current_user.id, file.filename or "", data)
+    stored = service.save_upload(current_user.id, filename, data)
+    await AuditService(session).record(
+        AuditAction.USER_UPLOAD_REPLACED if replaced else AuditAction.USER_UPLOAD_CREATED,
+        actor_user_id=current_user.id,
+        subject_user_id=current_user.id,
+        resource_type="upload",
+        resource_id=stored.name,
+        metadata={"filename": stored.name, "overwrite": replaced},
+    )
     usage = service.usage(current_user.id)
     return UploadResponse(
         file=FileResponse.from_domain(stored),
@@ -71,10 +83,27 @@ async def download_output(
     if task.status is not RenderStatus.DONE:
         raise TaskNotFoundError(f"任务尚未完成: id={task_id}")
     path = _service().get_output_path(current_user.id, task.output_path)
+    await AuditService(session).record(
+        AuditAction.RENDER_DOWNLOADED,
+        actor_user_id=current_user.id,
+        subject_user_id=current_user.id,
+        resource_type="render_task",
+        resource_id=str(task.id),
+    )
     filename = path.name
     return FastAPIFileResponse(path, filename=filename)
 
 
 @router.delete("/{name}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_file(current_user: CurrentUserDep, name: str) -> None:
+async def delete_file(
+    current_user: CurrentUserDep, name: str, session: SessionDep
+) -> None:
     _service().delete_upload(current_user.id, name)
+    await AuditService(session).record(
+        AuditAction.USER_UPLOAD_DELETED,
+        actor_user_id=current_user.id,
+        subject_user_id=current_user.id,
+        resource_type="upload",
+        resource_id=name,
+        metadata={"filename": name},
+    )

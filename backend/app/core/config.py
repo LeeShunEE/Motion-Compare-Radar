@@ -109,6 +109,7 @@ class Settings(BaseSettings):
     output_gc_interval_seconds: int = 3600  # GC 周期（秒），默认 1 小时
     output_gc_max_age_days: int = 7  # 产物保留天数
     output_gc_global_max_size_bytes: int = 10 * 1024 * 1024 * 1024  # 全局 outputs 目录最大大小（10GB）
+    audit_retention_days: int = 180
 
     # 测试环境标识（启用测试端点，生产必须 false）
     testing: bool = False

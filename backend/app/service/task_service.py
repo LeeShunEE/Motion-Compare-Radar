@@ -53,7 +53,7 @@ class TaskService:
             raise TaskNotFoundError(f"任务不存在: id={task_id}")
         return self._view(task)
 
-    async def delete_for_user(self, task_id: int, user_id: int) -> None:
+    async def delete_for_user(self, task_id: int, user_id: int) -> RenderTask:
         """删除任务：活动中先取消，再删行与产物文件。"""
         task = await self._dao.get_for_user(task_id, user_id)
         if task is None:
@@ -65,3 +65,4 @@ class TaskService:
         output = Path(task.output_path)
         if output.is_file():
             output.unlink()
+        return task

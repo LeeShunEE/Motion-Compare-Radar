@@ -13,6 +13,7 @@ import {
   getAccessToken,
   getRefreshToken,
   ApiError,
+  admin,
   TaskResponse,
 } from "@/lib/api-client";
 
@@ -377,6 +378,51 @@ describe("api-client", () => {
       mockFetch.mockResolvedValueOnce({ ok: true, status: 204, json: vi.fn() });
       const unbound = await auth.unbindOAuth("github");
       expect(unbound).toBeNull();
+    });
+  });
+
+  describe("admin users and audit", () => {
+    const ok = (body: unknown) => ({ ok: true, status: 200, json: async () => body });
+
+    it("serializes user filters and reads detail", async () => {
+      mockFetch.mockResolvedValueOnce(ok({ items: [], total: 0, page: 2, page_size: 20 }));
+      await admin.listUsers({ search: "alice", isAdmin: true, isActive: false, isVerified: true, page: 2, pageSize: 20 });
+      expect(mockFetch.mock.calls[0][0]).toContain("search=alice");
+      expect(mockFetch.mock.calls[0][0]).toContain("is_active=false");
+      expect(mockFetch.mock.calls[0][0]).toContain("page_size=20");
+      mockFetch.mockResolvedValueOnce(ok({ user: { id: 9 }, usage: {} }));
+      expect((await admin.getUser(9)).user.id).toBe(9);
+    });
+
+    it("patches role and status", async () => {
+      mockFetch.mockResolvedValueOnce(ok({ id: 9, is_admin: true }));
+      await admin.setUserRole(9, true);
+      expect(mockFetch.mock.calls.at(-1)![1]).toMatchObject({ method: "PATCH", body: JSON.stringify({ is_admin: true }) });
+      mockFetch.mockResolvedValueOnce(ok({ id: 9, is_active: false }));
+      await admin.setUserStatus(9, false);
+      expect(mockFetch.mock.calls.at(-1)![1]).toMatchObject({ method: "PATCH", body: JSON.stringify({ is_active: false }) });
+    });
+
+    it("serializes audit filters and user cursor", async () => {
+      mockFetch.mockResolvedValueOnce(ok({ items: [], next_cursor: null }));
+      await admin.listAuditEvents({ beforeId: 12, limit: 20, action: "render.submitted", success: false });
+      expect(mockFetch.mock.calls.at(-1)![0]).toContain("before_id=12");
+      expect(mockFetch.mock.calls.at(-1)![0]).toContain("success=false");
+      mockFetch.mockResolvedValueOnce(ok({ items: [], next_cursor: null }));
+      await admin.listUserActivity(9, 4);
+      expect(mockFetch.mock.calls.at(-1)![0]).toContain("users/9/activity?before_id=4");
+    });
+
+    it("uses stable defaults for unfiltered pages", async () => {
+      mockFetch.mockResolvedValueOnce(ok({ items: [], total: 0, page: 1, page_size: 50 }));
+      await admin.listUsers();
+      expect(mockFetch.mock.calls.at(-1)![0]).toContain("page=1&page_size=50");
+      mockFetch.mockResolvedValueOnce(ok({ items: [], next_cursor: null }));
+      await admin.listAuditEvents();
+      expect(mockFetch.mock.calls.at(-1)![0]).toContain("limit=50");
+      mockFetch.mockResolvedValueOnce(ok({ items: [], next_cursor: null }));
+      await admin.listUserActivity(9);
+      expect(mockFetch.mock.calls.at(-1)![0]).toMatch(/users\/9\/activity$/);
     });
   });
 

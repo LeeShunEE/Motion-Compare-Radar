@@ -6,7 +6,7 @@ DAO 层在 ``UserORM`` 与领域模型（``User`` / ``UserCredentials``）之间
 
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dao.orm import UserORM
@@ -176,6 +176,68 @@ class UserDAO:
                 orm.is_admin = True
 
         orm.last_login_at = datetime.now(tz=UTC)
+        await self._session.commit()
+        await self._session.refresh(orm)
+        return _to_user(orm)
+
+    async def list_filtered(
+        self,
+        *,
+        search: str | None,
+        is_admin: bool | None,
+        is_active: bool | None,
+        is_verified: bool | None,
+        offset: int,
+        limit: int,
+    ) -> tuple[list[User], int]:
+        """按管理条件分页查询用户。"""
+        filters = []
+        if search:
+            pattern = f"%{search.casefold()}%"
+            filters.append(
+                or_(
+                    func.lower(UserORM.email).like(pattern),
+                    func.lower(UserORM.username).like(pattern),
+                )
+            )
+        if is_admin is not None:
+            filters.append(UserORM.is_admin.is_(is_admin))
+        if is_active is not None:
+            filters.append(UserORM.is_active.is_(is_active))
+        if is_verified is not None:
+            filters.append(UserORM.is_verified.is_(is_verified))
+
+        stmt = select(UserORM).where(*filters)
+        count_stmt = select(func.count(UserORM.id)).where(*filters)
+        total = int((await self._session.execute(count_stmt)).scalar_one())
+        rows = (
+            await self._session.execute(
+                stmt.order_by(UserORM.id.desc()).offset(offset).limit(limit)
+            )
+        ).scalars().all()
+        return [_to_user(row) for row in rows], total
+
+    async def count_active_admins(self) -> int:
+        stmt = select(func.count(UserORM.id)).where(
+            UserORM.is_admin.is_(True),
+            UserORM.is_active.is_(True),
+        )
+        return int((await self._session.execute(stmt)).scalar_one())
+
+    async def set_admin(self, user_id: int, *, is_admin: bool) -> User:
+        orm = await self._session.get(UserORM, user_id, with_for_update=True)
+        if orm is None:
+            raise ValueError(f"用户 {user_id} 不存在")
+        orm.is_admin = is_admin
+        await self._session.commit()
+        await self._session.refresh(orm)
+        return _to_user(orm)
+
+    async def set_active(self, user_id: int, *, is_active: bool) -> User:
+        orm = await self._session.get(UserORM, user_id, with_for_update=True)
+        if orm is None:
+            raise ValueError(f"用户 {user_id} 不存在")
+        orm.is_active = is_active
         await self._session.commit()
         await self._session.refresh(orm)
         return _to_user(orm)

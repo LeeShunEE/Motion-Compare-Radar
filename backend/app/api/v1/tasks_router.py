@@ -3,7 +3,9 @@
 from fastapi import APIRouter, status
 
 from app.api.deps import CurrentUserDep, SessionDep
+from app.models.audit_event import AuditAction
 from app.schemas.task import TaskListResponse, TaskResponse
+from app.service.audit_service import AuditService
 from app.service.queue_service import render_queue
 from app.service.task_service import TaskService
 
@@ -41,4 +43,20 @@ async def delete_task(
     session: SessionDep,
 ) -> None:
     service = TaskService(session, render_queue)
-    await service.delete_for_user(task_id, current_user.id)
+    task = await service.delete_for_user(task_id, current_user.id)
+    if task.is_active:
+        await AuditService(session).record(
+            AuditAction.RENDER_CANCELED,
+            actor_user_id=current_user.id,
+            subject_user_id=current_user.id,
+            resource_type="render_task",
+            resource_id=str(task_id),
+        )
+    await AuditService(session).record(
+        AuditAction.RENDER_DELETED,
+        actor_user_id=current_user.id,
+        subject_user_id=current_user.id,
+        resource_type="render_task",
+        resource_id=str(task_id),
+        metadata={"status": task.status.value},
+    )

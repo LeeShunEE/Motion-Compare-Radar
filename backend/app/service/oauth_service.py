@@ -18,7 +18,9 @@ from app.core.exceptions import OAuthError as BusinessOAuthError
 from app.dao.oauth_dao import OAuthDAO
 from app.dao.oauth_state_dao import OAuthStateDAO
 from app.dao.user_dao import UserDAO
+from app.models.audit_event import AuditAction
 from app.models.user import User
+from app.service.audit_service import AuditService
 
 
 class OAuthService:
@@ -28,6 +30,7 @@ class OAuthService:
         self._oauth_dao = OAuthDAO(session)
         self._user_dao = UserDAO(session)
         self._oauth_state_dao = OAuthStateDAO(session)
+        self._audit = AuditService(session)
 
     async def start_authorization(self, provider: str) -> str:
         """发起 OAuth 授权：生成随机 state 落库并返回授权 URL。
@@ -339,10 +342,18 @@ class OAuthService:
         """对所有 OAuth 登录统一执行 active 校验、引导和登录时间记录。"""
         if not user.is_active:
             raise AccountDisabledError("账号已停用")
-        return await self._user_dao.record_successful_login(
+        logged_in_user = await self._user_dao.record_successful_login(
             user.id,
             initial_admin_email=settings.initial_admin_email,
         )
+        await self._audit.record(
+            AuditAction.AUTH_LOGIN_SUCCEEDED,
+            actor_user_id=logged_in_user.id,
+            subject_user_id=logged_in_user.id,
+            resource_type="user",
+            resource_id=str(logged_in_user.id),
+        )
+        return logged_in_user
 
     async def bind_oauth_account(
         self,
