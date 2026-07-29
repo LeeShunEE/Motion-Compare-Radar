@@ -12,22 +12,39 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // 每个 loader mock 为 no-op；vi 在 hoist 的 factory 内可用
 const noopLoader = () => vi.fn(() => ({ waitUntil: Promise.resolve() }));
-vi.mock("@remotion/google-fonts/NotoSansSC", () => ({ loadFont: noopLoader() }));
-vi.mock("@remotion/google-fonts/NotoSerifSC", () => ({ loadFont: noopLoader() }));
-vi.mock("@remotion/google-fonts/ZCOOLQingKeHuangYou", () => ({ loadFont: noopLoader() }));
-vi.mock("@remotion/google-fonts/ZCOOLKuaiLe", () => ({ loadFont: noopLoader() }));
-vi.mock("@remotion/google-fonts/MaShanZheng", () => ({ loadFont: noopLoader() }));
-vi.mock("@remotion/google-fonts/Orbitron", () => ({ loadFont: noopLoader() }));
-vi.mock("@remotion/google-fonts/Rajdhani", () => ({ loadFont: noopLoader() }));
-vi.mock("@remotion/google-fonts/RussoOne", () => ({ loadFont: noopLoader() }));
-vi.mock("@remotion/google-fonts/BebasNeue", () => ({ loadFont: noopLoader() }));
-vi.mock("@remotion/google-fonts/Exo2", () => ({ loadFont: noopLoader() }));
-vi.mock("@remotion/google-fonts/Audiowide", () => ({ loadFont: noopLoader() }));
-vi.mock("@remotion/google-fonts/PressStart2P", () => ({ loadFont: noopLoader() }));
-vi.mock("@remotion/google-fonts/BlackOpsOne", () => ({ loadFont: noopLoader() }));
+const fontModule = (
+  weights = ["400", "700"],
+  subsets = ["latin"],
+) => ({
+  loadFont: noopLoader(),
+  getInfo: vi.fn(() => ({
+    fonts: {
+      normal: Object.fromEntries(weights.map((weight) => [weight, {}])),
+    },
+    subsets,
+  })),
+});
+vi.mock("@remotion/google-fonts/NotoSansSC", () =>
+  fontModule(["400", "700"], ["chinese-simplified", "latin"]),
+);
+vi.mock("@remotion/google-fonts/NotoSerifSC", () => fontModule());
+vi.mock("@remotion/google-fonts/ZCOOLQingKeHuangYou", () => fontModule());
+vi.mock("@remotion/google-fonts/ZCOOLKuaiLe", () =>
+  fontModule(["400"], ["chinese-simplified", "latin"]),
+);
+vi.mock("@remotion/google-fonts/MaShanZheng", () => fontModule());
+vi.mock("@remotion/google-fonts/Orbitron", () => fontModule());
+vi.mock("@remotion/google-fonts/Rajdhani", () => fontModule());
+vi.mock("@remotion/google-fonts/RussoOne", () => fontModule());
+vi.mock("@remotion/google-fonts/BebasNeue", () => fontModule());
+vi.mock("@remotion/google-fonts/Exo2", () => fontModule());
+vi.mock("@remotion/google-fonts/Audiowide", () => fontModule());
+vi.mock("@remotion/google-fonts/PressStart2P", () => fontModule());
+vi.mock("@remotion/google-fonts/BlackOpsOne", () => fontModule());
 
 import {
   CURATED_FONTS,
+  getCuratedFontLoadOptions,
   loadCuratedFonts,
   loadFontDynamic,
   loadSelectedFonts,
@@ -51,6 +68,23 @@ describe("CURATED_FONTS", () => {
 describe("loadCuratedFonts", () => {
   it("遍历所有 curated loader 且不抛错", async () => {
     await expect(loadCuratedFonts()).resolves.toBeUndefined();
+  });
+});
+
+describe("getCuratedFontLoadOptions", () => {
+  it("只请求字体 normal 样式实际支持的常用字重", () => {
+    expect(getCuratedFontLoadOptions("ZCOOL KuaiLe").weights).toEqual(["400"]);
+    expect(getCuratedFontLoadOptions("Noto Sans SC").weights).toEqual([
+      "400",
+      "700",
+    ]);
+  });
+
+  it("CJK 字体保留简中与拉丁子集", () => {
+    expect(getCuratedFontLoadOptions("ZCOOL KuaiLe").subsets).toEqual([
+      "latin",
+      "chinese-simplified",
+    ]);
   });
 });
 
