@@ -7,7 +7,7 @@ from app.utils.datetime import ensure_utc
 
 class TestEnsureUtc:
     def test_naive_gets_utc_tzinfo(self):
-        naive = datetime(2026, 6, 18, 12, 0, 0)
+        naive = datetime(2026, 6, 18, 12, 0, 0)  # noqa: DTZ001 测试刻意构造 naive 输入
         result = ensure_utc(naive)
         assert result.tzinfo is UTC
         assert result == datetime(2026, 6, 18, 12, 0, 0, tzinfo=UTC)

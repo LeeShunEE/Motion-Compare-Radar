@@ -442,6 +442,30 @@ export interface AdminRenderHistory {
   page_size: number;
 }
 
+export type DashboardRange = "24h" | "7d" | "30d";
+
+export interface AdminDashboardData {
+  range: DashboardRange;
+  users: { total: number; admins: number; verified: number; active: number };
+  renders: { submitted: number; queued: number; running: number; done: number; failed: number; canceled: number; success_rate: number; avg_queue_ms: number; p95_queue_ms: number; avg_render_ms: number; p95_render_ms: number };
+  queue: { pending: number; running: number; concurrency: number; avg_fps: number | null };
+  storage: { uploads: { count: number; bytes: number; partial: boolean }; outputs: { count: number; bytes: number; partial: boolean }; public_assets: { count: number; bytes: number; partial: boolean } };
+  recent_failures: Array<{ task_id: number; user_id: number; error_code: string; created_at: string }>;
+  top_errors: Array<{ error_code: string; count: number }>;
+}
+
+export interface SystemHealthData {
+  state: "healthy" | "degraded";
+  uptime_seconds: number;
+  database: { state: "healthy" | "degraded"; latency_ms: number | null; message: string | null };
+  render_worker: { state: "healthy" | "degraded"; latency_ms: number | null; message: string | null };
+  backend_storage: { state: "healthy" | "degraded"; readable: boolean; writable: boolean };
+  public_assets: { state: "healthy" | "degraded"; readable: boolean; writable: boolean };
+  render_tmp: { state: "healthy" | "degraded"; readable: boolean; writable: boolean };
+  disk_total_bytes: number;
+  disk_free_bytes: number;
+}
+
 export interface AdminUserFilters {
   search?: string;
   isAdmin?: boolean;
@@ -558,6 +582,9 @@ export const admin = {
     authFetch<AdminRenderTask>(`/api/v1/admin/render/${taskId}/cancel`, { method: "POST" }),
   retryRender: (taskId: number) =>
     authFetch<AdminRenderTask>(`/api/v1/admin/render/${taskId}/retry`, { method: "POST" }),
+  dashboard: (range: DashboardRange) =>
+    authFetch<AdminDashboardData>(`/api/v1/admin/dashboard?range=${range}`),
+  systemHealth: () => authFetch<SystemHealthData>("/api/v1/admin/system/health"),
 };
 
 export interface TaskResponse {

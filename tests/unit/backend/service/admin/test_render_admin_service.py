@@ -19,6 +19,7 @@ def _service(task: RenderTask) -> RenderAdminService:
     service._dao = AsyncMock()
     service._dao.get.side_effect = [task, task.model_copy(update={"status": RenderStatus.CANCELED})]
     service._queue = MagicMock()
+    service._queue.cancel = AsyncMock()
     service._audit = AsyncMock()
     service._files = MagicMock()
     service._files.outputs_dir.return_value = __import__("pathlib").Path("/tmp")
@@ -29,7 +30,7 @@ async def test_cancel_active_task_updates_db_queue_and_audit() -> None:
     service = _service(_task(8, RenderStatus.RUNNING))
     result = await service.cancel(actor_user_id=1, task_id=8)
     assert result.status is RenderStatus.CANCELED
-    service._queue.cancel.assert_called_once_with(8)
+    service._queue.cancel.assert_awaited_once_with(8)
     service._dao.mark_canceled.assert_awaited_once_with(8)
     service._audit.record.assert_awaited_once()
 

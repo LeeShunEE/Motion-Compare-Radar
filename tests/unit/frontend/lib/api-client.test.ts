@@ -442,6 +442,14 @@ describe("api-client", () => {
       await admin.retryRender(8);
       expect(mockFetch.mock.calls.at(-1)![0]).toContain("/8/retry");
     });
+
+    it("loads dashboard range and system health", async () => {
+      mockFetch.mockResolvedValueOnce(ok({ range: "7d" }));
+      expect((await admin.dashboard("7d")).range).toBe("7d");
+      expect(mockFetch.mock.calls.at(-1)![0]).toContain("range=7d");
+      mockFetch.mockResolvedValueOnce(ok({ state: "degraded" }));
+      expect((await admin.systemHealth()).state).toBe("degraded");
+    });
   });
 
   describe("files.upload（XHR，支持进度）", () => {

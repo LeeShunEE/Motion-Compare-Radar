@@ -70,7 +70,7 @@ class RenderAdminService:
         task = await self._require_task(task_id)
         if not task.is_active:
             raise RenderOperationConflictError("仅排队中或运行中的任务可以取消")
-        self._queue.cancel(task_id)
+        await self._queue.cancel(task_id)
         await self._dao.mark_canceled(task_id)
         updated = await self._require_task(task_id)
         await self._audit.record(

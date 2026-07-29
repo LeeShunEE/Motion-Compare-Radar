@@ -4,7 +4,11 @@ from pathlib import Path
 
 import pytest
 
-from app.core.exceptions import InvalidFileError, PublicAssetConflictError, StoredFileNotFoundError
+from app.core.exceptions import (
+    InvalidFileError,
+    PublicAssetConflictError,
+    StoredFileNotFoundError,
+)
 from app.models.public_asset import AssetCategory
 from app.service.admin.public_asset_service import PublicAssetService
 
@@ -56,6 +60,26 @@ def test_existing_file_requires_explicit_overwrite(service: PublicAssetService) 
     )
     assert replaced.size_bytes == 3
     assert service.path(AssetCategory.MUSIC, "intro.mp3").read_bytes() == b"new"
+
+
+def test_no_overwrite_is_atomic_when_target_appears_after_validation(
+    service: PublicAssetService, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    service.save(AssetCategory.MUSIC, "race.mp3", b"first")
+    target = service.path(AssetCategory.MUSIC, "race.mp3")
+    original_exists = Path.exists
+
+    def hide_target(path: Path) -> bool:
+        if path == target:
+            return False
+        return original_exists(path)
+
+    monkeypatch.setattr(Path, "exists", hide_target)
+
+    with pytest.raises(PublicAssetConflictError):
+        service.save(AssetCategory.MUSIC, "race.mp3", b"second")
+
+    assert target.read_bytes() == b"first"
 
 
 def test_delete_removes_file_and_missing_is_404(service: PublicAssetService) -> None:

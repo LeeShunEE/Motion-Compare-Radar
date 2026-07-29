@@ -1,5 +1,6 @@
 """公共资源文件的安全存取服务。"""
 
+import os
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
@@ -85,13 +86,16 @@ class PublicAssetService:
             raise InvalidFileError("公共资源文件超过大小限制")
 
         target = self._category_dir(category) / name
-        if target.exists() and not overwrite:
-            raise PublicAssetConflictError("同名公共资源已存在")
-
         temporary = target.with_name(f".{name}.{uuid4().hex}.tmp")
         try:
             temporary.write_bytes(data)
-            temporary.replace(target)
+            if overwrite:
+                temporary.replace(target)
+            else:
+                try:
+                    os.link(temporary, target)
+                except FileExistsError as exc:
+                    raise PublicAssetConflictError("同名公共资源已存在") from exc
         finally:
             if temporary.exists():
                 temporary.unlink()

@@ -5,6 +5,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel, EmailStr, Field
 
+from app.models.admin_dashboard import AdminDashboard, SystemHealth
 from app.models.admin_render import ActiveRenderSnapshot, ActiveRenderTask
 from app.models.admin_user import AdminUserDetail
 from app.models.audit_event import AuditEvent
@@ -227,3 +228,19 @@ class AdminRenderHistoryResponse(BaseModel):
     total: int = Field(ge=0)
     page: int = Field(ge=1)
     page_size: int = Field(ge=1, le=200)
+
+
+class AdminDashboardResponse(AdminDashboard):
+    """Dashboard 对外契约。"""
+
+    @classmethod
+    def from_domain(cls, dashboard: AdminDashboard) -> "AdminDashboardResponse":
+        return cls.model_validate(dashboard.model_dump())
+
+
+class SystemHealthResponse(SystemHealth):
+    """系统健康对外契约。"""
+
+    @classmethod
+    def from_domain(cls, health: SystemHealth) -> "SystemHealthResponse":
+        return cls.model_validate(health.model_dump())

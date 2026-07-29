@@ -19,6 +19,7 @@ class UserAdminService:
     """用户管理用例与最后管理员保护。"""
 
     def __init__(self, session: AsyncSession) -> None:
+        self._session = session
         self._user_dao = UserDAO(session)
         self._render_dao = RenderTaskDAO(session)
         self._audit_dao = AuditEventDAO(session)
@@ -101,20 +102,26 @@ class UserAdminService:
             target.is_admin
             and target.is_active
             and not is_admin
-            and await self._user_dao.count_active_admins() <= 1
+            and await self._user_dao.count_active_admins_for_update() <= 1
         ):
             raise AdminSafetyError("不能撤销最后一位启用管理员")
-        updated = await self._user_dao.set_admin(target_user_id, is_admin=is_admin)
-        await self._audit.record(
-            AuditAction.ADMIN_ROLE_GRANTED
-            if is_admin
-            else AuditAction.ADMIN_ROLE_REVOKED,
-            actor_user_id=actor_user_id,
-            subject_user_id=target_user_id,
-            resource_type="user",
-            resource_id=str(target_user_id),
-            metadata={"role": "admin" if is_admin else "user"},
-        )
+        try:
+            updated = await self._user_dao.set_admin(
+                target_user_id, is_admin=is_admin, commit=False
+            )
+            await self._audit.record(
+                AuditAction.ADMIN_ROLE_GRANTED
+                if is_admin
+                else AuditAction.ADMIN_ROLE_REVOKED,
+                actor_user_id=actor_user_id,
+                subject_user_id=target_user_id,
+                resource_type="user",
+                resource_id=str(target_user_id),
+                metadata={"role": "admin" if is_admin else "user"},
+            )
+        except Exception:
+            await self._session.rollback()
+            raise
         return updated
 
     async def set_status(
@@ -131,18 +138,24 @@ class UserAdminService:
             target.is_admin
             and target.is_active
             and not is_active
-            and await self._user_dao.count_active_admins() <= 1
+            and await self._user_dao.count_active_admins_for_update() <= 1
         ):
             raise AdminSafetyError("不能停用最后一位启用管理员")
-        updated = await self._user_dao.set_active(target_user_id, is_active=is_active)
-        await self._audit.record(
-            AuditAction.ADMIN_USER_ACTIVATED
-            if is_active
-            else AuditAction.ADMIN_USER_DEACTIVATED,
-            actor_user_id=actor_user_id,
-            subject_user_id=target_user_id,
-            resource_type="user",
-            resource_id=str(target_user_id),
-            metadata={"status": "active" if is_active else "disabled"},
-        )
+        try:
+            updated = await self._user_dao.set_active(
+                target_user_id, is_active=is_active, commit=False
+            )
+            await self._audit.record(
+                AuditAction.ADMIN_USER_ACTIVATED
+                if is_active
+                else AuditAction.ADMIN_USER_DEACTIVATED,
+                actor_user_id=actor_user_id,
+                subject_user_id=target_user_id,
+                resource_type="user",
+                resource_id=str(target_user_id),
+                metadata={"status": "active" if is_active else "disabled"},
+            )
+        except Exception:
+            await self._session.rollback()
+            raise
         return updated

@@ -18,6 +18,7 @@ from app.service.gc_service import OutputGCService
 
 
 def _make_config(
+    *,
     gc_enabled: bool = True,
     gc_interval: int = 3600,
     gc_max_age_days: int = 7,

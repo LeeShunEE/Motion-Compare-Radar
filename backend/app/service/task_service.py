@@ -59,7 +59,7 @@ class TaskService:
         if task is None:
             raise TaskNotFoundError(f"任务不存在: id={task_id}")
         if task.is_active:
-            self._queue.cancel(task_id)
+            await self._queue.cancel(task_id)
         await self._dao.delete(task_id)
         self._queue.forget(task_id)
         output = Path(task.output_path)

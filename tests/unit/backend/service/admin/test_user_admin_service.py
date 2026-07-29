@@ -24,8 +24,11 @@ def _user(user_id: int, *, is_admin: bool, is_active: bool = True) -> User:
     )
 
 
-def _service(dao: AsyncMock, audit: AsyncMock) -> UserAdminService:
+def _service(
+    dao: AsyncMock, audit: AsyncMock, session: AsyncMock | None = None
+) -> UserAdminService:
     service = UserAdminService.__new__(UserAdminService)
+    service._session = session or AsyncMock()
     service._user_dao = dao
     service._audit = audit
     return service
@@ -53,12 +56,13 @@ async def test_cannot_revoke_own_admin_role() -> None:
 async def test_cannot_disable_last_active_admin() -> None:
     dao = AsyncMock()
     dao.get_by_id.return_value = _user(7, is_admin=True)
-    dao.count_active_admins.return_value = 1
+    dao.count_active_admins_for_update.return_value = 1
     service = _service(dao, AsyncMock())
 
     with pytest.raises(AdminSafetyError):
         await service.set_status(actor_user_id=8, target_user_id=7, is_active=False)
 
+    dao.count_active_admins_for_update.assert_awaited_once()
     dao.set_active.assert_not_awaited()
 
 
@@ -76,6 +80,7 @@ async def test_role_grant_is_persisted_and_audited() -> None:
     )
 
     assert result.is_admin is True
+    dao.set_admin.assert_awaited_once_with(9, is_admin=True, commit=False)
     audit.record.assert_awaited_once_with(
         AuditAction.ADMIN_ROLE_GRANTED,
         actor_user_id=7,
@@ -84,6 +89,21 @@ async def test_role_grant_is_persisted_and_audited() -> None:
         resource_id="9",
         metadata={"role": "admin"},
     )
+
+
+async def test_role_change_rolls_back_when_audit_write_fails() -> None:
+    dao = AsyncMock()
+    dao.get_by_id.return_value = _user(9, is_admin=False)
+    dao.set_admin.return_value = _user(9, is_admin=True)
+    audit = AsyncMock()
+    audit.record.side_effect = RuntimeError("audit unavailable")
+    session = AsyncMock()
+    service = _service(dao, audit, session)
+
+    with pytest.raises(RuntimeError, match="audit unavailable"):
+        await service.set_role(actor_user_id=7, target_user_id=9, is_admin=True)
+
+    session.rollback.assert_awaited_once()
 
 
 async def test_user_detail_aggregates_storage_renders_and_activity() -> None:

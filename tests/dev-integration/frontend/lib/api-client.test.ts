@@ -162,4 +162,17 @@ describe("admin api client", () => {
     await admin.retryRender(8);
     expect(fetchMock.mock.calls.at(-1)![0]).toContain("/8/retry");
   });
+
+  it("covers dashboard range and system health endpoints", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ state: "healthy", range: "30d" }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    await admin.dashboard("30d");
+    expect(fetchMock.mock.calls.at(-1)![0]).toContain("range=30d");
+    await admin.systemHealth();
+    expect(fetchMock.mock.calls.at(-1)![0]).toContain("system/health");
+  });
 });

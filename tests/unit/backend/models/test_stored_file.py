@@ -1,9 +1,10 @@
 """StoredFile 模型单元测试。"""
 
-import pytest
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 
-from app.models.stored_file import StoredFile, StorageUsage
+import pytest
+
+from app.models.stored_file import StorageUsage, StoredFile
 
 
 class TestStoredFileModel:

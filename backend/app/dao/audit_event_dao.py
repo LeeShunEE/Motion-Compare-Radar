@@ -101,3 +101,14 @@ class AuditEventDAO:
         )
         await self._session.commit()
         return int(result.rowcount or 0)
+
+    async def active_user_ids_since(self, cutoff: datetime) -> set[int]:
+        stmt = (
+            select(AuditEventORM.actor_user_id)
+            .where(
+                AuditEventORM.actor_user_id.is_not(None),
+                AuditEventORM.created_at >= cutoff,
+            )
+            .distinct()
+        )
+        return set((await self._session.execute(stmt)).scalars().all())

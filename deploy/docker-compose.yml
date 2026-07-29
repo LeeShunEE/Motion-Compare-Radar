@@ -59,7 +59,7 @@ services:
       WORKER_BASE_URL: http://render-worker:3100
       RENDER_TIMEOUT_SECONDS: ${RENDER_TIMEOUT_SECONDS:-600}
       # 进度回调共享密钥（与 render-worker 的 RENDER_CALLBACK_TOKEN 同值，防公网伪造）
-      RENDER_CALLBACK_TOKEN_SECRET_STRING: ${RENDER_CALLBACK_TOKEN:-dev-only-render-callback-token}
+      RENDER_CALLBACK_TOKEN_SECRET_STRING: ${RENDER_CALLBACK_TOKEN:?RENDER_CALLBACK_TOKEN is required}
       # Public assets path (frontend public directory mounted for asset listing)
       PUBLIC_ASSETS_PATH: /app/public_assets
       MAX_PUBLIC_ASSET_BYTES: ${MAX_PUBLIC_ASSET_BYTES:-104857600}
@@ -157,7 +157,10 @@ services:
       WORKER_PORT: 3100
       # 进度回调目标 + 共享密钥（与 backend 的 RENDER_CALLBACK_TOKEN_SECRET_STRING 同值）
       BACKEND_INTERNAL_URL: http://backend:8000
-      RENDER_CALLBACK_TOKEN: ${RENDER_CALLBACK_TOKEN:-dev-only-render-callback-token}
+      RENDER_CALLBACK_TOKEN: ${RENDER_CALLBACK_TOKEN:?RENDER_CALLBACK_TOKEN is required}
+    depends_on:
+      backend:
+        condition: service_healthy
     volumes:
       - render_outputs:/app/output
       - backend_storage:/app/storage  # 共享 backend storage，让产物写入后可被 backend 读取

@@ -29,7 +29,7 @@ services:
       target: development
       args:
         # 国内本地开发走中国镜像（生产/Coolify 不传 → 官方源）
-        PIP_INDEX: https://mirrors.aliyun.com/pypi/simple/
+        PIP_INDEX: ${PIP_INDEX-https://mirrors.aliyun.com/pypi/simple/}
     environment:
       # Use SQLite for development (uncomment to use PostgreSQL)
       DATABASE_URL: sqlite+aiosqlite:///./storage/dev.db
@@ -52,7 +52,7 @@ services:
       RENDER_TIMEOUT_SECONDS: 600
       # 进度回调共享密钥（与 render-worker 的 RENDER_CALLBACK_TOKEN 同值）
       RENDER_CALLBACK_TOKEN_SECRET_STRING: dev-only-render-callback-token
-      INITIAL_ADMIN_EMAIL: ${INITIAL_ADMIN_EMAIL:-admin@test.com}
+      INITIAL_ADMIN_EMAIL: ${INITIAL_ADMIN_EMAIL:-dev@test.com}
     ports:
       - "18000:8000"
     volumes:

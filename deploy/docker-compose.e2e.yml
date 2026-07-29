@@ -1,0 +1,35 @@
+# Isolate testenv resources from local or production-compatible named volumes.
+# E2E_RESOURCE_PREFIX must be unique for concurrent/local runs that share a Docker host.
+services:
+  db:
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-radar}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-radar_chart}
+  backend:
+    build:
+      args:
+        PIP_INDEX: ""
+    environment:
+      # testenv 必须连接真实 PostgreSQL；仅本地开发 override 使用 SQLite。
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-radar}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@db:5432/${POSTGRES_DB:-radar_chart}
+      RENDER_CALLBACK_TOKEN_SECRET_STRING: ${RENDER_CALLBACK_TOKEN:?RENDER_CALLBACK_TOKEN is required}
+  render-worker:
+    environment:
+      RENDER_CALLBACK_TOKEN: ${RENDER_CALLBACK_TOKEN:?RENDER_CALLBACK_TOKEN is required}
+
+volumes:
+  postgres_data:
+    name: ${E2E_RESOURCE_PREFIX:-radar_e2e}_postgres_data
+  backend_storage:
+    name: ${E2E_RESOURCE_PREFIX:-radar_e2e}_backend_storage
+  render_outputs:
+    name: ${E2E_RESOURCE_PREFIX:-radar_e2e}_render_outputs
+  render_tmp:
+    name: ${E2E_RESOURCE_PREFIX:-radar_e2e}_render_tmp
+  public_assets:
+    name: ${E2E_RESOURCE_PREFIX:-radar_e2e}_public_assets
+
+networks:
+  default:
+    name: ${E2E_RESOURCE_PREFIX:-radar_e2e}-network

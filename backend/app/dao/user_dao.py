@@ -154,6 +154,11 @@ class UserDAO:
         rows = (await self._session.execute(stmt)).scalars().all()
         return list(rows)
 
+    async def list_all(self) -> list[User]:
+        """返回 Dashboard 聚合所需的全部用户公开领域模型。"""
+        rows = (await self._session.execute(select(UserORM))).scalars().all()
+        return [_to_user(row) for row in rows]
+
     async def record_successful_login(
         self, user_id: int, *, initial_admin_email: str | None
     ) -> User:
@@ -224,20 +229,43 @@ class UserDAO:
         )
         return int((await self._session.execute(stmt)).scalar_one())
 
-    async def set_admin(self, user_id: int, *, is_admin: bool) -> User:
+    async def count_active_admins_for_update(self) -> int:
+        """锁定全部启用管理员并返回数量，供最后管理员事务保护使用。"""
+        stmt = (
+            select(UserORM.id)
+            .where(
+                UserORM.is_admin.is_(True),
+                UserORM.is_active.is_(True),
+            )
+            .with_for_update()
+        )
+        rows = (await self._session.execute(stmt)).scalars().all()
+        return len(rows)
+
+    async def set_admin(
+        self, user_id: int, *, is_admin: bool, commit: bool = True
+    ) -> User:
         orm = await self._session.get(UserORM, user_id, with_for_update=True)
         if orm is None:
             raise ValueError(f"用户 {user_id} 不存在")
         orm.is_admin = is_admin
-        await self._session.commit()
+        if commit:
+            await self._session.commit()
+        else:
+            await self._session.flush()
         await self._session.refresh(orm)
         return _to_user(orm)
 
-    async def set_active(self, user_id: int, *, is_active: bool) -> User:
+    async def set_active(
+        self, user_id: int, *, is_active: bool, commit: bool = True
+    ) -> User:
         orm = await self._session.get(UserORM, user_id, with_for_update=True)
         if orm is None:
             raise ValueError(f"用户 {user_id} 不存在")
         orm.is_active = is_active
-        await self._session.commit()
+        if commit:
+            await self._session.commit()
+        else:
+            await self._session.flush()
         await self._session.refresh(orm)
         return _to_user(orm)

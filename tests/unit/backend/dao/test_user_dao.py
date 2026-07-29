@@ -446,3 +446,23 @@ class TestRecordSuccessfulLogin:
         )
 
         assert user.is_admin is False
+
+
+class TestCountActiveAdminsForUpdate:
+    async def test_locks_active_admin_rows_before_counting(
+        self, dao: UserDAO, mock_session: AsyncMock
+    ) -> None:
+        result = MagicMock()
+        scalars = MagicMock()
+        scalars.all.return_value = [1, 2]
+        result.scalars.return_value = scalars
+
+        async def execute(statement):
+            assert statement._for_update_arg is not None
+            return result
+
+        mock_session.execute = AsyncMock(side_effect=execute)
+
+        count = await dao.count_active_admins_for_update()
+
+        assert count == 2
