@@ -76,6 +76,7 @@
     "lint": "eslint .",
     "remotion": "remotion studio",
     "render": "remotion render",
+    "sample:presets": "node scripts/sample-presets.mjs",
     "worker": "node render-worker/server.mjs",
     "deploy": "node deploy.mjs",
     "test:unit": "vitest run --coverage",
