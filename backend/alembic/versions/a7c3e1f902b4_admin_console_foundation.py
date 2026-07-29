@@ -35,6 +35,19 @@ def upgrade() -> None:
         batch_op.create_index("ix_users_is_admin", ["is_admin"], unique=False)
         batch_op.create_index("ix_users_is_active", ["is_active"], unique=False)
 
+    with op.batch_alter_table("render_tasks", schema=None) as batch_op:
+        batch_op.add_column(sa.Column("retry_of_task_id", sa.Integer(), nullable=True))
+        batch_op.create_foreign_key(
+            "fk_render_tasks_retry_of_task_id",
+            "render_tasks",
+            ["retry_of_task_id"],
+            ["id"],
+            ondelete="SET NULL",
+        )
+        batch_op.create_index(
+            "ix_render_tasks_retry_of_task_id", ["retry_of_task_id"], unique=False
+        )
+
     op.create_table(
         "audit_events",
         sa.Column("id", sa.Integer(), nullable=False),
@@ -76,6 +89,13 @@ def downgrade() -> None:
     op.drop_index("ix_audit_events_actor_user_id", table_name="audit_events")
     op.drop_index("ix_audit_events_action", table_name="audit_events")
     op.drop_table("audit_events")
+
+    with op.batch_alter_table("render_tasks", schema=None) as batch_op:
+        batch_op.drop_index("ix_render_tasks_retry_of_task_id")
+        batch_op.drop_constraint(
+            "fk_render_tasks_retry_of_task_id", type_="foreignkey"
+        )
+        batch_op.drop_column("retry_of_task_id")
 
     with op.batch_alter_table("users", schema=None) as batch_op:
         batch_op.drop_index("ix_users_is_active")

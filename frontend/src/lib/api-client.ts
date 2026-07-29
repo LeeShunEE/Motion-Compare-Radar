@@ -406,6 +406,42 @@ export interface AdminAuditEventList {
   next_cursor: number | null;
 }
 
+export interface AdminRenderTask {
+  id: number;
+  user_id: number;
+  mode: string;
+  codec: string;
+  status: string;
+  output_path: string;
+  error: string | null;
+  duration_ms: number | null;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+  retry_of_task_id: number | null;
+}
+
+export interface AdminActiveRender extends AdminRenderTask {
+  position: number;
+  rendered_frames: number | null;
+  total_frames: number | null;
+  eta_seconds: number | null;
+}
+
+export interface AdminActiveRenderList {
+  concurrency: number;
+  queue_size: number;
+  avg_fps: number | null;
+  items: AdminActiveRender[];
+}
+
+export interface AdminRenderHistory {
+  items: AdminRenderTask[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
 export interface AdminUserFilters {
   search?: string;
   isAdmin?: boolean;
@@ -507,6 +543,21 @@ export const admin = {
     const query = beforeId === undefined ? "" : `?before_id=${beforeId}`;
     return authFetch<AdminAuditEventList>(`/api/v1/admin/users/${userId}/activity${query}`);
   },
+  activeRenders: () => authFetch<AdminActiveRenderList>("/api/v1/admin/render/active"),
+  renderHistory: (filters: { userId?: number; status?: string; mode?: string; codec?: string; page?: number; pageSize?: number } = {}) => {
+    const query = new URLSearchParams();
+    if (filters.userId !== undefined) query.set("user_id", String(filters.userId));
+    if (filters.status) query.set("status", filters.status);
+    if (filters.mode) query.set("mode", filters.mode);
+    if (filters.codec) query.set("codec", filters.codec);
+    query.set("page", String(filters.page ?? 1));
+    query.set("page_size", String(filters.pageSize ?? 50));
+    return authFetch<AdminRenderHistory>(`/api/v1/admin/render/history?${query}`);
+  },
+  cancelRender: (taskId: number) =>
+    authFetch<AdminRenderTask>(`/api/v1/admin/render/${taskId}/cancel`, { method: "POST" }),
+  retryRender: (taskId: number) =>
+    authFetch<AdminRenderTask>(`/api/v1/admin/render/${taskId}/retry`, { method: "POST" }),
 };
 
 export interface TaskResponse {

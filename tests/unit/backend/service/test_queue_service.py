@@ -78,6 +78,23 @@ class TestPosition:
         assert q.position(999) == 0
 
 
+class TestAdminSnapshot:
+    def test_snapshot_contains_running_progress_pending_position_and_capacity(self):
+        q = _make_queue(concurrency=2)
+        q._running[10] = __import__("time").monotonic()
+        q._progress[10] = (24, 100)
+        q.enqueue(20)
+        q.record_render_speed(60, 1000)
+
+        snapshot = q.admin_snapshot()
+
+        assert snapshot.concurrency == 2
+        assert snapshot.queue_size == 2
+        assert snapshot.avg_fps == 60
+        assert snapshot.tasks[0].rendered_frames == 24
+        assert snapshot.tasks[1].position == 1
+
+
 class TestEta:
     def test_eta_for_running_task(self):
         q = _make_queue()

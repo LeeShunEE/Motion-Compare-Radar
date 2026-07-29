@@ -98,6 +98,13 @@ class TaskNotFoundError(BusinessError):
     code = "task_not_found"
 
 
+class RenderOperationConflictError(BusinessError):
+    """当前任务状态不允许管理员执行该渲染操作。"""
+
+    status_code = 409
+    code = "render_operation_conflict"
+
+
 class RenderFailedError(BusinessError):
     """渲染 worker 执行失败。"""
 

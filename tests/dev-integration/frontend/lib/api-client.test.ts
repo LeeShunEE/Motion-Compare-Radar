@@ -143,4 +143,23 @@ describe("admin api client", () => {
     await admin.listUserActivity(9);
     expect(fetchMock.mock.calls.at(-1)![0]).toMatch(/activity$/);
   });
+
+  it("covers admin render operations and history filters", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ items: [], total: 0, page: 1, page_size: 50 }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await admin.activeRenders();
+    await admin.renderHistory({ userId: 3, status: "failed", mode: "single", codec: "h264", page: 2, pageSize: 20 });
+    expect(fetchMock.mock.calls.at(-1)![0]).toContain("codec=h264");
+    await admin.renderHistory();
+    expect(fetchMock.mock.calls.at(-1)![0]).toContain("page_size=50");
+    await admin.cancelRender(8);
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe("POST");
+    await admin.retryRender(8);
+    expect(fetchMock.mock.calls.at(-1)![0]).toContain("/8/retry");
+  });
 });

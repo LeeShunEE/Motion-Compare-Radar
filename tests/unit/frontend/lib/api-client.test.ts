@@ -424,6 +424,24 @@ describe("api-client", () => {
       await admin.listUserActivity(9);
       expect(mockFetch.mock.calls.at(-1)![0]).toMatch(/users\/9\/activity$/);
     });
+
+    it("covers global render queue, filtered history and operations", async () => {
+      mockFetch.mockResolvedValueOnce(ok({ concurrency: 2, queue_size: 0, avg_fps: null, items: [] }));
+      expect((await admin.activeRenders()).concurrency).toBe(2);
+      mockFetch.mockResolvedValueOnce(ok({ items: [], total: 0, page: 2, page_size: 20 }));
+      await admin.renderHistory({ userId: 3, status: "failed", mode: "single", codec: "h264", page: 2, pageSize: 20 });
+      expect(mockFetch.mock.calls.at(-1)![0]).toContain("user_id=3");
+      expect(mockFetch.mock.calls.at(-1)![0]).toContain("codec=h264");
+      mockFetch.mockResolvedValueOnce(ok({ items: [], total: 0, page: 1, page_size: 50 }));
+      await admin.renderHistory();
+      expect(mockFetch.mock.calls.at(-1)![0]).toContain("page_size=50");
+      mockFetch.mockResolvedValueOnce(ok({ id: 8, status: "canceled" }));
+      await admin.cancelRender(8);
+      expect(mockFetch.mock.calls.at(-1)![1].method).toBe("POST");
+      mockFetch.mockResolvedValueOnce(ok({ id: 12, status: "queued" }));
+      await admin.retryRender(8);
+      expect(mockFetch.mock.calls.at(-1)![0]).toContain("/8/retry");
+    });
   });
 
   describe("files.upload（XHR，支持进度）", () => {

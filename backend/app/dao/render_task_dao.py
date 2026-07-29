@@ -7,7 +7,7 @@
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dao.orm import RenderTaskORM
@@ -28,6 +28,7 @@ def _to_domain(orm: RenderTaskORM) -> RenderTask:
         created_at=orm.created_at,
         started_at=orm.started_at,
         finished_at=orm.finished_at,
+        retry_of_task_id=orm.retry_of_task_id,
     )
 
 
@@ -49,6 +50,7 @@ class RenderTaskDAO:
         codec: Codec,
         input_props: dict[str, Any],
         output_path: str,
+        retry_of_task_id: int | None = None,
     ) -> RenderTask:
         orm = RenderTaskORM(
             user_id=user_id,
@@ -57,6 +59,7 @@ class RenderTaskDAO:
             status=RenderStatus.QUEUED.value,
             input_props=input_props,
             output_path=output_path,
+            retry_of_task_id=retry_of_task_id,
         )
         self._session.add(orm)
         await self._session.commit()
@@ -90,6 +93,37 @@ class RenderTaskDAO:
             .order_by(RenderTaskORM.created_at.asc())
         )
         return list((await self._session.execute(stmt)).scalars().all())
+
+    async def list_global(
+        self,
+        *,
+        user_id: int | None,
+        status: RenderStatus | None,
+        mode: RenderMode | None,
+        codec: Codec | None,
+        offset: int,
+        limit: int,
+    ) -> tuple[list[RenderTask], int]:
+        filters = []
+        if user_id is not None:
+            filters.append(RenderTaskORM.user_id == user_id)
+        if status is not None:
+            filters.append(RenderTaskORM.status == status.value)
+        if mode is not None:
+            filters.append(RenderTaskORM.mode == mode.value)
+        if codec is not None:
+            filters.append(RenderTaskORM.codec == codec.value)
+        count_stmt = select(func.count(RenderTaskORM.id)).where(*filters)
+        total = int((await self._session.execute(count_stmt)).scalar_one())
+        stmt = (
+            select(RenderTaskORM)
+            .where(*filters)
+            .order_by(RenderTaskORM.created_at.desc(), RenderTaskORM.id.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        rows = (await self._session.execute(stmt)).scalars().all()
+        return [_to_domain(row) for row in rows], total
 
     async def _set_status(self, task_id: int, **values: Any) -> None:  # noqa: ANN401
         await self._session.execute(

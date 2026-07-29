@@ -5,9 +5,11 @@ from enum import StrEnum
 
 from pydantic import BaseModel, EmailStr, Field
 
+from app.models.admin_render import ActiveRenderSnapshot, ActiveRenderTask
 from app.models.admin_user import AdminUserDetail
 from app.models.audit_event import AuditEvent
 from app.models.public_asset import PublicAsset
+from app.models.render_task import RenderTask
 from app.models.user import User
 
 
@@ -152,3 +154,76 @@ class AuditEventResponse(BaseModel):
 class AuditEventListResponse(BaseModel):
     items: list[AuditEventResponse]
     next_cursor: int | None
+
+
+class AdminRenderTaskResponse(BaseModel):
+    id: int
+    user_id: int
+    mode: str
+    codec: str
+    status: str
+    output_path: str
+    error: str | None
+    duration_ms: int | None
+    created_at: datetime
+    started_at: datetime | None
+    finished_at: datetime | None
+    retry_of_task_id: int | None
+
+    @classmethod
+    def from_domain(cls, task: RenderTask) -> "AdminRenderTaskResponse":
+        return cls(
+            id=task.id,
+            user_id=task.user_id,
+            mode=task.mode.value,
+            codec=task.codec.value,
+            status=task.status.value,
+            output_path=task.output_path,
+            error=task.error,
+            duration_ms=task.duration_ms,
+            created_at=task.created_at,
+            started_at=task.started_at,
+            finished_at=task.finished_at,
+            retry_of_task_id=task.retry_of_task_id,
+        )
+
+
+class AdminActiveRenderResponse(AdminRenderTaskResponse):
+    position: int
+    rendered_frames: int | None
+    total_frames: int | None
+    eta_seconds: float | None
+
+    @classmethod
+    def from_domain(cls, active: ActiveRenderTask) -> "AdminActiveRenderResponse":
+        task = AdminRenderTaskResponse.from_domain(active.task).model_dump()
+        return cls(
+            **task,
+            position=active.queue.position,
+            rendered_frames=active.queue.rendered_frames,
+            total_frames=active.queue.total_frames,
+            eta_seconds=active.queue.eta_seconds,
+        )
+
+
+class AdminActiveRenderListResponse(BaseModel):
+    concurrency: int
+    queue_size: int
+    avg_fps: float | None
+    items: list[AdminActiveRenderResponse]
+
+    @classmethod
+    def from_domain(cls, snapshot: ActiveRenderSnapshot) -> "AdminActiveRenderListResponse":
+        return cls(
+            concurrency=snapshot.queue.concurrency,
+            queue_size=snapshot.queue.queue_size,
+            avg_fps=snapshot.queue.avg_fps,
+            items=[AdminActiveRenderResponse.from_domain(item) for item in snapshot.tasks],
+        )
+
+
+class AdminRenderHistoryResponse(BaseModel):
+    items: list[AdminRenderTaskResponse]
+    total: int = Field(ge=0)
+    page: int = Field(ge=1)
+    page_size: int = Field(ge=1, le=200)

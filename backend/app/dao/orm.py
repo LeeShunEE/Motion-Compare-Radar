@@ -148,6 +148,9 @@ class RenderTaskORM(Base):
     __tablename__ = "render_tasks"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    retry_of_task_id: Mapped[int | None] = mapped_column(
+        ForeignKey("render_tasks.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), index=True
     )

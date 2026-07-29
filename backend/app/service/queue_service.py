@@ -18,6 +18,8 @@ from app.core.config import settings
 from app.core.database import async_session_factory
 from app.core.exceptions import RenderFailedError
 from app.dao.render_task_dao import RenderTaskDAO
+from app.models.admin_render import QueueTaskSnapshot, RenderQueueSnapshot
+from app.models.render_task import RenderStatus
 from app.service.silhouette_rewrite import cleanup_render_tmp
 
 # 没有历史样本时的单任务耗时兜底估计（秒）。
@@ -107,6 +109,35 @@ class RenderQueue:
 
     def queue_size(self) -> int:
         return len(self._pending) + len(self._running)
+
+    def admin_snapshot(self) -> RenderQueueSnapshot:
+        """复制当前队列状态，避免向管理接口暴露可变内部容器。"""
+        tasks = [
+            QueueTaskSnapshot(
+                task_id=task_id,
+                status=RenderStatus.RUNNING,
+                position=0,
+                rendered_frames=self._progress.get(task_id, (None, None))[0],
+                total_frames=self._progress.get(task_id, (None, None))[1],
+                eta_seconds=self.eta_seconds(task_id),
+            )
+            for task_id in self._running
+        ]
+        tasks.extend(
+            QueueTaskSnapshot(
+                task_id=task_id,
+                status=RenderStatus.QUEUED,
+                position=position,
+                eta_seconds=self.eta_seconds(task_id),
+            )
+            for position, task_id in enumerate(self._pending, start=1)
+        )
+        return RenderQueueSnapshot(
+            concurrency=self._concurrency,
+            queue_size=len(tasks),
+            avg_fps=self.average_fps(),
+            tasks=tasks,
+        )
 
     def position(self, task_id: int) -> int:
         """1 基排位（排队中）；运行中或已结束返回 0。"""
