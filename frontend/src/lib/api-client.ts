@@ -166,7 +166,7 @@ export const auth = {
       { method: "POST", body: JSON.stringify({ refresh_token: refreshToken }) },
     ),
   me: () =>
-    authFetch<{ id: number; username: string | null; email: string; is_verified: boolean; display_name: string | null; created_at: string }>(
+    authFetch<{ id: number; username: string | null; email: string; is_verified: boolean; is_admin: boolean; is_active: boolean; display_name: string | null; last_login_at: string | null; created_at: string }>(
       "/api/v1/auth/me",
     ),
   /** 设置用户名 */
@@ -336,6 +336,17 @@ export const assets = {
     ),
   url: (category: string, name: string) =>
     `${API_BASE}/api/v1/assets/${category}/${encodeURIComponent(name)}`,
+};
+
+export interface AdminSession {
+  id: number;
+  username: string | null;
+  email: string;
+  capabilities: string[];
+}
+
+export const admin = {
+  session: () => authFetch<AdminSession>("/api/v1/admin/me"),
 };
 
 export interface TaskResponse {

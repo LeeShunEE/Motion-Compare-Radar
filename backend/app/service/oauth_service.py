@@ -13,7 +13,7 @@ from authlib.integrations.httpx_client import AsyncOAuth2Client
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.exceptions import OAuthAccountAlreadyBoundError
+from app.core.exceptions import AccountDisabledError, OAuthAccountAlreadyBoundError
 from app.core.exceptions import OAuthError as BusinessOAuthError
 from app.dao.oauth_dao import OAuthDAO
 from app.dao.oauth_state_dao import OAuthStateDAO
@@ -297,7 +297,7 @@ class OAuthService:
             user = await self._user_dao.get_by_id(oauth_account.user_id)
             if user is None:
                 raise BusinessOAuthError("OAuth 绑定的用户不存在")
-            return user, False
+            return await self._complete_login(user), False
 
         # 检查邮箱是否已注册
         existing_user = None
@@ -313,7 +313,7 @@ class OAuthService:
                 provider_email=provider_email,
                 provider_display_name=provider_display_name,
             )
-            return existing_user, False
+            return await self._complete_login(existing_user), False
 
         # 首次登录，自动注册
         user = await self._user_dao.create(
@@ -333,7 +333,16 @@ class OAuthService:
             provider_display_name=provider_display_name,
         )
 
-        return user, True
+        return await self._complete_login(user), True
+
+    async def _complete_login(self, user: User) -> User:
+        """对所有 OAuth 登录统一执行 active 校验、引导和登录时间记录。"""
+        if not user.is_active:
+            raise AccountDisabledError("账号已停用")
+        return await self._user_dao.record_successful_login(
+            user.id,
+            initial_admin_email=settings.initial_admin_email,
+        )
 
     async def bind_oauth_account(
         self,

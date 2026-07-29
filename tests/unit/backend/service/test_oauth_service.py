@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from app.core.config import settings
-from app.core.exceptions import OAuthError
+from app.core.exceptions import AccountDisabledError, OAuthError
 from app.models.user import OAuthAccount, User
 from app.service.oauth_service import OAuthService
 
@@ -77,12 +77,18 @@ def _make_service(
     return service
 
 
-def _user(uid: int = 1, username: str | None = "alice") -> User:
+def _user(
+    uid: int = 1,
+    username: str | None = "alice",
+    *,
+    is_active: bool = True,
+) -> User:
     return User(
         id=uid,
         username=username,
         email="alice@example.com",
         is_verified=True,
+        is_active=is_active,
         created_at=datetime(2026, 1, 1, tzinfo=UTC),
     )
 
@@ -141,6 +147,7 @@ class TestCreateOrGetUser:
         oauth_dao.get_by_provider_user_id.return_value = _oauth_account(1)
         user_dao = AsyncMock()
         user_dao.get_by_id.return_value = _user(1)
+        user_dao.record_successful_login.return_value = _user(1)
         service = _make_service(oauth_dao, user_dao, AsyncMock())
 
         user, is_new = await service._create_or_get_user(
@@ -148,7 +155,24 @@ class TestCreateOrGetUser:
         )
         assert is_new is False
         assert user.id == 1
+        user_dao.record_successful_login.assert_awaited_once_with(
+            1, initial_admin_email=None
+        )
         oauth_dao.create.assert_not_called()
+
+    async def test_existing_disabled_binding_is_rejected(self):
+        oauth_dao = AsyncMock()
+        oauth_dao.get_by_provider_user_id.return_value = _oauth_account(1)
+        user_dao = AsyncMock()
+        user_dao.get_by_id.return_value = _user(1, is_active=False)
+        service = _make_service(oauth_dao, user_dao, AsyncMock())
+
+        with pytest.raises(AccountDisabledError):
+            await service._create_or_get_user(
+                "google", "g-1", "alice@example.com", "Alice"
+            )
+
+        user_dao.record_successful_login.assert_not_awaited()
 
     async def test_existing_binding_missing_user_raises(self):
         oauth_dao = AsyncMock()

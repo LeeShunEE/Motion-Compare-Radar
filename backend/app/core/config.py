@@ -42,6 +42,8 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60 * 24
     jwt_refresh_expire_minutes: int = 60 * 24 * 7
+    # 仅当数据库尚无管理员时，匹配邮箱的成功登录用户可完成首次引导。
+    initial_admin_email: str | None = None
 
     # 验证码
     verification_code_expire_minutes: int = 10

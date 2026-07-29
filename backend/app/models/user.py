@@ -24,7 +24,10 @@ class User(BaseModel):
     username: str | None = Field(default=None, min_length=3, max_length=64)
     email: EmailStr
     is_verified: bool = False
+    is_admin: bool = False
+    is_active: bool = True
     display_name: str | None = None
+    last_login_at: datetime | None = None
     created_at: datetime
 
 

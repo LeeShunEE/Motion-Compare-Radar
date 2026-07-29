@@ -7,7 +7,9 @@ from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.exceptions import (
+    AccountDisabledError,
     AuthError,
     UserExistsError,
     UserNotFoundError,
@@ -80,7 +82,10 @@ class AuthService:
             is_verified=True,
         )
 
-        return user
+        return await self._dao.record_successful_login(
+            user.id,
+            initial_admin_email=settings.initial_admin_email,
+        )
 
     async def authenticate(self, *, username: str | None = None, email: str | None = None, password: str) -> User:
         """校验账号口令，成功返回用户；失败抛 ``AuthError``。
@@ -113,7 +118,12 @@ class AuthService:
         user = await self._dao.get_by_id(credentials.user_id)
         if user is None:  # 极端竞态：凭据存在但用户被删
             raise AuthError("用户名/邮箱或密码错误")
-        return user
+        if not user.is_active:
+            raise AccountDisabledError("账号已停用")
+        return await self._dao.record_successful_login(
+            user.id,
+            initial_admin_email=settings.initial_admin_email,
+        )
 
     async def set_username(self, user_id: int, username: str) -> User:
         """设置用户名（OAuth 用户首次登录后设置）。"""

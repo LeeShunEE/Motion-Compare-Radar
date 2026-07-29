@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.core.exceptions import AuthError, UserExistsError
+from app.core.exceptions import AccountDisabledError, AuthError, UserExistsError
 from app.core.security import hash_password
 from app.models.user import User, UserCredentials
 from app.service.auth_service import AuthService
@@ -19,12 +19,14 @@ def _make_service(dao: AsyncMock, verification_dao: AsyncMock = None) -> AuthSer
     return service
 
 
-def _user() -> User:
+def _user(*, is_active: bool = True, is_admin: bool = False) -> User:
     return User(
         id=1,
         username="alice",
         email="alice@example.com",
         is_verified=True,
+        is_active=is_active,
+        is_admin=is_admin,
         created_at=datetime(2026, 1, 1, tzinfo=UTC),
     )
 
@@ -82,6 +84,14 @@ class TestVerifyAndRegister:
             is_verified=True,
             created_at=datetime(2026, 1, 1, tzinfo=UTC),
         )
+        dao.record_successful_login.return_value = User(
+            id=1,
+            username=None,
+            email="alice@example.com",
+            is_verified=True,
+            is_admin=True,
+            created_at=datetime(2026, 1, 1, tzinfo=UTC),
+        )
         service = _make_service(dao, verification_dao)
 
         user = await service.verify_and_register(
@@ -91,6 +101,10 @@ class TestVerifyAndRegister:
         assert user.email == "alice@example.com"
         assert user.username is None
         assert user.is_verified is True
+        assert user.is_admin is True
+        dao.record_successful_login.assert_awaited_once_with(
+            1, initial_admin_email=None
+        )
 
     async def test_verify_and_register_invalid_code_raises(self):
         """verify_and_register 验证码错误时抛异常。"""
@@ -133,6 +147,48 @@ class TestVerifyAndRegister:
 
 
 class TestAuthenticate:
+    async def test_authenticate_records_login_and_applies_admin_bootstrap(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """成功登录必须更新时间，并由 DAO 原子判定首位管理员。"""
+        dao = AsyncMock()
+        dao.get_credentials_by_username.return_value = UserCredentials(
+            user_id=1,
+            username="alice",
+            password_hash_secret_string=hash_password("password123"),
+        )
+        dao.get_by_id.return_value = _user()
+        dao.record_successful_login.return_value = _user(is_admin=True)
+        from app.core.config import settings
+
+        monkeypatch.setattr(
+            settings, "initial_admin_email", "alice@example.com", raising=False
+        )
+        service = _make_service(dao)
+
+        user = await service.authenticate(username="alice", password="password123")
+
+        assert user.is_admin is True
+        dao.record_successful_login.assert_awaited_once_with(
+            1, initial_admin_email="alice@example.com"
+        )
+
+    async def test_authenticate_rejects_disabled_account(self) -> None:
+        """停用账号不能换取新 token。"""
+        dao = AsyncMock()
+        dao.get_credentials_by_username.return_value = UserCredentials(
+            user_id=1,
+            username="alice",
+            password_hash_secret_string=hash_password("password123"),
+        )
+        dao.get_by_id.return_value = _user(is_active=False)
+        service = _make_service(dao)
+
+        with pytest.raises(AccountDisabledError):
+            await service.authenticate(username="alice", password="password123")
+
+        dao.record_successful_login.assert_not_awaited()
+
     async def test_authenticate_by_username_success(self):
         """authenticate 用户名登录成功。"""
         dao = AsyncMock()
@@ -142,6 +198,7 @@ class TestAuthenticate:
             password_hash_secret_string=hash_password("password123"),
         )
         dao.get_by_id.return_value = _user()
+        dao.record_successful_login.return_value = _user()
         service = _make_service(dao)
 
         user = await service.authenticate(username="alice", password="password123")
@@ -156,6 +213,7 @@ class TestAuthenticate:
             password_hash_secret_string=hash_password("password123"),
         )
         dao.get_by_id.return_value = _user()
+        dao.record_successful_login.return_value = _user()
         service = _make_service(dao)
 
         user = await service.authenticate(email="alice@example.com", password="password123")

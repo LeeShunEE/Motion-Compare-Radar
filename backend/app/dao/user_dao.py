@@ -4,6 +4,8 @@ DAO 层在 ``UserORM`` 与领域模型（``User`` / ``UserCredentials``）之间
 对上层只暴露领域模型，``*ORM`` 不越出本层。
 """
 
+from datetime import UTC, datetime
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,7 +19,10 @@ def _to_user(orm: UserORM) -> User:
         username=orm.username,
         email=orm.email,
         is_verified=orm.is_verified,
+        is_admin=orm.is_admin,
+        is_active=orm.is_active,
         display_name=orm.display_name,
+        last_login_at=orm.last_login_at,
         created_at=orm.created_at,
     )
 
@@ -148,3 +153,29 @@ class UserDAO:
         stmt = select(UserORM.id)
         rows = (await self._session.execute(stmt)).scalars().all()
         return list(rows)
+
+    async def record_successful_login(
+        self, user_id: int, *, initial_admin_email: str | None
+    ) -> User:
+        """记录登录时间，并在系统无管理员时完成一次性管理员引导。"""
+        orm = await self._session.get(UserORM, user_id, with_for_update=True)
+        if orm is None:
+            raise ValueError(f"用户 {user_id} 不存在")
+
+        should_consider_bootstrap = (
+            initial_admin_email is not None
+            and orm.email.casefold() == initial_admin_email.casefold()
+            and not orm.is_admin
+        )
+        if should_consider_bootstrap:
+            admin_stmt = select(UserORM.id).where(UserORM.is_admin.is_(True)).limit(1)
+            existing_admin_id = (
+                await self._session.execute(admin_stmt)
+            ).scalar_one_or_none()
+            if existing_admin_id is None:
+                orm.is_admin = True
+
+        orm.last_login_at = datetime.now(tz=UTC)
+        await self._session.commit()
+        await self._session.refresh(orm)
+        return _to_user(orm)

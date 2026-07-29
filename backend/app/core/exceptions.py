@@ -30,6 +30,18 @@ class PermissionDeniedError(BusinessError):
     code = "permission_denied"
 
 
+class AccountDisabledError(PermissionDeniedError):
+    """账号已被管理员停用。"""
+
+    code = "account_disabled"
+
+
+class AdminRequiredError(PermissionDeniedError):
+    """当前账号缺少管理员权限。"""
+
+    code = "admin_required"
+
+
 class UserExistsError(BusinessError):
     """用户名/邮箱已存在。"""
 
