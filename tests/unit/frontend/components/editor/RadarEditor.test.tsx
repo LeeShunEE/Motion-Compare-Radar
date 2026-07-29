@@ -7,6 +7,7 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import { RadarEditor } from "@/components/editor/RadarEditor";
 import { defaultMultiPageConfig, defaultRadarProps } from "@/types/constants";
 import { ComparisonPairSchema, type MultiPageConfig } from "@/types/radar";
+import { getBuiltInPreset } from "@/presets/built-in-presets";
 
 // 构造一个 4 页 + 两组对比的 config，专门驱动 remap/move/remove/dup 的分支
 const makeRichConfig = (): MultiPageConfig => ({
@@ -97,8 +98,18 @@ vi.mock("@/components/editor/PageConfigPanel", () => ({
     <div onFocus={() => p.onUpdate({})}>
       {p.previewing && <span data-testid={`previewing-${p.index}`}>预览中</span>}
       <span data-testid={`pc-${p.index}`}>
-        {p.page.characterName}|{p.page.theme.backgroundColor}|{JSON.stringify(p.page.overrideIgnored ?? {})}
+        {p.page.characterName}|{p.page.theme.backgroundColor}|
+        {p.page.font.characterNameFamily}|{p.page.animation.fillDuration}|
+        {p.page.attributes[0].value}|{JSON.stringify(p.page.overrideIgnored ?? {})}
       </span>
+      {p.index === 0 && (
+        <button
+          data-testid="apply-preset"
+          onClick={() => p.onApplyPreset(getBuiltInPreset("mint-terminal"))}
+        >
+          apply preset
+        </button>
+      )}
       <button
         data-testid={`upd-${p.index}`}
         onClick={() => p.onUpdate({ theme: { backgroundColor: "#newbg" } })}
@@ -204,6 +215,24 @@ describe("RadarEditor", () => {
     fireEvent.click(screen.getByTestId("ignore-0"));
     const text = screen.getByTestId("pc-0").textContent ?? "";
     expect(text).toContain('"theme.backgroundColor":true');
+  });
+
+  it("应用预设会更新全部页面样式并保留内容与时间参数", () => {
+    render(<RadarEditor />);
+    fireEvent.click(screen.getByTestId("load"));
+
+    const before = [0, 1, 2, 3].map((index) =>
+      screen.getByTestId(`pc-${index}`).textContent,
+    );
+    fireEvent.click(screen.getByTestId("apply-preset"));
+
+    [0, 1, 2, 3].forEach((index) => {
+      const after = screen.getByTestId(`pc-${index}`).textContent ?? "";
+      expect(after).toContain(`P${index}|#041714|Exo 2`);
+      expect(after.split("|")[3]).toBe(before[index]?.split("|")[3]);
+      expect(after.split("|")[4]).toBe(before[index]?.split("|")[4]);
+    });
+    expect(comparisonPairs()).toBe("0-1,2-3");
   });
 
   it("PageConfigPanel preview/dup/rm 回调不崩溃", () => {

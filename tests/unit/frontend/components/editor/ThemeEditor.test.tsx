@@ -28,7 +28,9 @@ describe("ThemeEditor", () => {
   it("修改配色触发 onChange", () => {
     const onChange = vi.fn();
     render(<ThemeEditor theme={baseTheme} onChange={onChange} />);
-    fireEvent.change(screen.getAllByTestId("color-picker")[0], { target: { value: "#000000" } });
+    fireEvent.change(screen.getAllByTestId("color-picker")[0], {
+      target: { value: "#000000" },
+    });
     expect(onChange).toHaveBeenCalled();
     expect(onChange.mock.calls.at(-1)![0].backgroundColor).toBe("#000000");
   });
@@ -42,8 +44,31 @@ describe("ThemeEditor", () => {
     expect(onChange.mock.calls.at(-1)![0].gridColor).toBe("#111111");
   });
 
+  it("选择视觉预设时透传完整预设对象", () => {
+    const onApplyPreset = vi.fn();
+    render(
+      <ThemeEditor
+        theme={baseTheme}
+        onChange={() => {}}
+        onApplyPreset={onApplyPreset}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "应用「经典靛蓝」到全部页面" }),
+    );
+
+    expect(onApplyPreset).toHaveBeenCalledOnce();
+    expect(onApplyPreset.mock.calls[0][0].id).toBe("classic-indigo");
+  });
+
   it("不渲染暗角相关 UI（已迁至 BackgroundConfigPanel）", () => {
-    render(<ThemeEditor theme={{ ...baseTheme, vignetteEnabled: true }} onChange={() => {}} />);
+    render(
+      <ThemeEditor
+        theme={{ ...baseTheme, vignetteEnabled: true }}
+        onChange={() => {}}
+      />,
+    );
     expect(screen.queryByText(/暗角/)).toBeNull();
     expect(screen.queryByText(/亮度偏移/)).toBeNull();
   });

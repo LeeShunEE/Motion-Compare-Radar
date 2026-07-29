@@ -4,11 +4,14 @@ import React from "react";
 import { useTranslations } from "next-intl";
 import { Label } from "../ui/label";
 import { ColorPicker } from "../ui/color-picker";
+import { PresetSelector } from "./PresetSelector";
 import type { RadarTheme } from "../../types/radar";
+import type { RadarPreset } from "../../types/presets";
 
 type ThemeEditorProps = {
   theme: RadarTheme;
   onChange: (theme: RadarTheme) => void;
+  onApplyPreset?: (preset: RadarPreset) => void;
   importMenu?: React.ReactNode;
 };
 
@@ -29,6 +32,7 @@ const colorFields: { key: keyof RadarTheme; labelKey: string }[] = [
 export const ThemeEditor: React.FC<ThemeEditorProps> = ({
   theme,
   onChange,
+  onApplyPreset,
   importMenu,
 }) => {
   const t = useTranslations("editor.theme");
@@ -38,6 +42,7 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({
 
   return (
     <div className="space-y-3">
+      {onApplyPreset && <PresetSelector onApply={onApplyPreset} />}
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-foreground">{t("title")}</h3>
         {importMenu}
