@@ -99,3 +99,4 @@ pnpm-debug.log*
 /tmp
 out/
 .worktrees/
+.superpowers
