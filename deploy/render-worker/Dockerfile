@@ -164,8 +164,10 @@ RUN --mount=type=cache,target=/root/.npm \
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile --prod
 
-# Copy render worker server
-COPY --chown=node:node frontend/render-worker/server.mjs ./render-worker/server.mjs
+# Copy entire render-worker package (server.mjs + local ESM deps).
+# server.mjs imports ./render-cancellation.mjs and ./worker-auth.mjs; copying
+# only server.mjs leaves production with ERR_MODULE_NOT_FOUND and crash-loop.
+COPY --chown=node:node frontend/render-worker ./render-worker
 
 # Copy source code needed for Remotion bundling (whole src/: components pull in
 # src/lib/* and src/types/*, and tsconfig "@/*" alias resolves to ./src/*).
