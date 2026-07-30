@@ -145,22 +145,46 @@ config is injected by the test system, never hard-coded (see `CLAUDE.md` §3.3.1
 
 ### 10. Releases (maintainers)
 
-This project follows [Semantic Versioning](https://semver.org/). Releases are
-cut by maintainers:
+This project follows [Semantic Versioning](https://semver.org/).
+
+**Version bumps must go through a PR — never push release commits straight to
+`main`.** Branch protection and CI (including the lockfile drift guard) only run
+on PRs. Direct pushes to `main` bypass those checks and have already caused
+release failures (e.g. bumping `pyproject.toml` without regenerating `uv.lock`).
+
+**After the release PR merges, do not tag manually.** The `Release` workflow
+(`.github/workflows/release.yml`) waits for the **CI workflow on `main`** to
+finish successfully, then:
+
+1. Detects that `frontend/package.json` `version` changed vs the parent commit
+2. Checks it matches `backend/pyproject.toml` `version`
+3. Creates GitHub Release `vX.Y.Z` on that merge commit (if the tag does not
+   already exist)
+4. The existing `Deploy` workflow runs on `release: published` and triggers
+   Coolify
 
 ```bash
-# 1. Bump frontend/package.json `version` to target version — the deploy workflow
-#    guards that the release tag matches it (and the footer version derives from
-#    it), so a missed bump fails the release.
-# 2. Generate merged PR list for LLM summarization:
+# 1. Open a release PR (do not commit version bumps on main):
+#    - Bump frontend/package.json `version` to the target version
+#    - Bump backend/pyproject.toml to the same version, then in backend/:
+#        uv lock
+#      Commit pyproject.toml + uv.lock together (and requirements*.txt if deps
+#      changed; §7 / CLAUDE.md §5.3)
+# 2. Wait for PR CI green, then merge into main
+# 3. Wait for CI on main (push) to go green — Release workflow then auto-creates
+#    vX.Y.Z and Deploy follows
+```
+
+**Backfill / emergency:** Actions → **Release** → **Run workflow**, optional
+`version` input (default = current `package.json`). Use only when a version is
+already on `main` but no GitHub Release exists (e.g. workflow added after a bump).
+
+**Manual fallback** (if Actions is unavailable):
+
+```bash
 python scripts/gen-release-notes.py --from-tag <prev-tag> > pr-list.md
-#    For first release (no prev-tag), omit --from-tag:
-#    python scripts/gen-release-notes.py > pr-list.md
-# 3. Summarize pr-list.md with LLM → release-notes.md (group by type: Features,
-#    Bug Fixes, Documentation, etc.; format as Keep a Changelog).
-# 4. Tag and push:
+# Summarize → release-notes.md if desired
 git tag -a v0.1.0 -m "v0.1.0" && git push origin v0.1.0
-# 5. Create release with summarized notes:
 gh release create v0.1.0 --notes-file release-notes.md --title "v0.1.0"
 ```
 
@@ -293,20 +317,38 @@ cd frontend && pnpm test:unit && pnpm test:integration
 
 ### 10. 发布（维护者）
 
-本项目遵循[语义化版本](https://semver.org/lang/zh-CN/)。由维护者发布：
+本项目遵循[语义化版本](https://semver.org/lang/zh-CN/)。
+
+**版本 bump 必须走 PR，禁止直接往 `main` 推发版 commit。** 分支保护与 CI
+（含 lockfile 漂移守卫）只在 PR 上完整生效；直推 `main` 曾导致漏跑 `uv lock`
+等发版事故。
+
+**发版 PR 合并后不必手动打 tag。** `Release` workflow
+（`.github/workflows/release.yml`）会等待 **`main` 上的 CI** 成功结束后：
+
+1. 检测 `frontend/package.json` 的 `version` 相对父提交是否变化
+2. 校验与 `backend/pyproject.toml` 版本一致
+3. 若尚无对应 tag，则在该 merge commit 上创建 GitHub Release `vX.Y.Z`
+4. 现有 `Deploy` workflow 监听 `release: published`，触发 Coolify
 
 ```bash
-# 1. 先把 frontend/package.json 的 `version` bump 到目标版本——deploy workflow 会校验
-#    release tag 与之一致（页脚版本号也由它派生），漏 bump 会让发版失败。
-# 2. 生成 merged PR 列表供 LLM 总结：
+# 1. 开发版 PR（不要在 main 上直接改版本号）：
+#    - bump frontend/package.json 的 version
+#    - 同步 bump backend/pyproject.toml，并在 backend/ 执行 uv lock
+#      将 pyproject.toml + uv.lock 一并提交（依赖变更时还有 requirements*.txt）
+# 2. 等 PR CI 绿后 merge 进 main
+# 3. 再等 main 上 CI（push）绿 —— Release workflow 自动建 vX.Y.Z，随后 Deploy
+```
+
+**补发 / 运维：** Actions → **Release** → **Run workflow**，可选填写 `version`
+（默认用当前 `package.json`）。仅用于「版本已在 main、但还没有 GitHub Release」
+的场景（例如本 workflow 上线前已 bump 的 0.7.2）。
+
+**人工兜底**（Actions 不可用时）：
+
+```bash
 python scripts/gen-release-notes.py --from-tag <上一个tag> > pr-list.md
-#    首个版本（无上一个tag）时省略 --from-tag：
-#    python scripts/gen-release-notes.py > pr-list.md
-# 3. 用 LLM 总结 pr-list.md → release-notes.md（按类型分组：Features、Bug Fixes、
-#    Documentation 等；格式参考 Keep a Changelog）。
-# 4. 打 tag 并推送：
 git tag -a v0.1.0 -m "v0.1.0" && git push origin v0.1.0
-# 5. 用总结后的 notes 创建 release：
 gh release create v0.1.0 --notes-file release-notes.md --title "v0.1.0"
 ```
 
