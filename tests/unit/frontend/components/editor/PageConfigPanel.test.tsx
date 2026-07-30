@@ -18,9 +18,6 @@ vi.mock("@/components/editor/LayoutEditor", () => ({
 vi.mock("@/components/editor/AttributeEditor", () => ({
   AttributeEditor: ({ importMenu }: any) => <div>{importMenu}</div>,
 }));
-vi.mock("@/components/editor/ThemeEditor", () => ({
-  ThemeEditor: ({ importMenu }: any) => <div>{importMenu}</div>,
-}));
 vi.mock("@/components/editor/FontSizeEditor", () => ({
   FontSizeEditor: ({ importMenu }: any) => <div>{importMenu}</div>,
 }));
@@ -60,6 +57,7 @@ const baseProps = (over: Record<string, unknown> = {}) => ({
   onPreview: vi.fn(),
   onDuplicate: vi.fn(),
   onRemove: vi.fn(),
+  onApplyPreset: vi.fn(),
   canRemove: true,
   ...over,
 });
@@ -74,7 +72,9 @@ describe("PageConfigPanel", () => {
   });
 
   it("isActive 但非 previewing（全局预览中）→ 不显示「预览中」", () => {
-    render(<PageConfigPanel {...baseProps({ isActive: true, previewing: false })} />);
+    render(
+      <PageConfigPanel {...baseProps({ isActive: true, previewing: false })} />,
+    );
     expect(screen.queryByText("预览中")).toBeNull();
   });
 
@@ -90,9 +90,7 @@ describe("PageConfigPanel", () => {
     const onDuplicate = vi.fn();
     const onRemove = vi.fn();
     render(
-      <PageConfigPanel
-        {...baseProps({ onPreview, onDuplicate, onRemove })}
-      />,
+      <PageConfigPanel {...baseProps({ onPreview, onDuplicate, onRemove })} />,
     );
     fireEvent.click(screen.getByText("▶ 预览"));
     expect(onPreview).toHaveBeenCalled();
@@ -100,6 +98,18 @@ describe("PageConfigPanel", () => {
     expect(onDuplicate).toHaveBeenCalled();
     fireEvent.click(screen.getByText("删除"));
     expect(onRemove).toHaveBeenCalled();
+  });
+
+  it("主题编辑器选择预设时透传到全局应用回调", () => {
+    const onApplyPreset = vi.fn();
+    render(<PageConfigPanel {...baseProps({ onApplyPreset })} />);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "应用「雾银制图」到全部页面" }),
+    );
+
+    expect(onApplyPreset).toHaveBeenCalledOnce();
+    expect(onApplyPreset.mock.calls[0][0].id).toBe("silver-cartography");
   });
 
   it("canRemove=false 时不渲染删除按钮", () => {

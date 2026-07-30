@@ -276,6 +276,33 @@
         "weakenArrowColor": "变弱箭头色"
       }
     },
+    "presets": {
+      "title": "视觉预设",
+      "description": "仅统一全部页面的颜色、字体、字号与布局偏移；页面内容、比较模式和动画时序保持不变。",
+      "applyLabel": "应用「{name}」到全部页面",
+      "items": {
+        "classic-indigo": {
+          "name": "经典靛蓝",
+          "description": "兼容现有视觉的靛蓝与琥珀基线"
+        },
+        "brass-observatory": {
+          "name": "黄铜观测站",
+          "description": "低光泽黄铜测量仪与象牙刻度"
+        },
+        "mint-terminal": {
+          "name": "薄荷终端",
+          "description": "深青实验监测屏与薄荷数据线"
+        },
+        "crimson-ringside": {
+          "name": "赤红擂台",
+          "description": "赛事计分牌式红色冲击与暖橙高值"
+        },
+        "silver-cartography": {
+          "name": "雾银制图",
+          "description": "浅色极地测绘稿与深青制图线"
+        }
+      }
+    },
     "layout": {
       "title": "布局配置",
       "disabledTip": "对比模式下此页作为第二角色，布局跟随第一角色，此配置不会渲染",

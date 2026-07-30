@@ -100,3 +100,4 @@ pnpm-debug.log*
 out/
 .worktrees/
 .superpowers
+/.preset-samples/

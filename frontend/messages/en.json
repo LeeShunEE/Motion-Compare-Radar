@@ -276,6 +276,33 @@
         "weakenArrowColor": "Weaken arrow"
       }
     },
+    "presets": {
+      "title": "Visual presets",
+      "description": "Unifies colors, typography, sizing, and layout offsets across every page. Content, comparison modes, and animation timing stay unchanged.",
+      "applyLabel": "Apply {name} to all pages",
+      "items": {
+        "classic-indigo": {
+          "name": "Classic Indigo",
+          "description": "The existing indigo and amber visual baseline"
+        },
+        "brass-observatory": {
+          "name": "Brass Observatory",
+          "description": "Low-gloss brass instruments with ivory scales"
+        },
+        "mint-terminal": {
+          "name": "Mint Terminal",
+          "description": "A deep-teal lab monitor with mint data lines"
+        },
+        "crimson-ringside": {
+          "name": "Crimson Ringside",
+          "description": "Broadcast scoreboard reds with warm-orange highs"
+        },
+        "silver-cartography": {
+          "name": "Silver Cartography",
+          "description": "A pale polar chart with deep-teal drafting lines"
+        }
+      }
+    },
     "layout": {
       "title": "Layout",
       "disabledTip": "In comparison mode this page acts as the second character; its layout follows the first character, so this setting is not rendered",

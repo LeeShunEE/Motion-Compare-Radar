@@ -18,6 +18,7 @@ import type {
   FontConfig,
   RadarVideoProps,
 } from "../../types/radar";
+import type { RadarPreset } from "../../types/presets";
 
 type PageConfigPanelProps = {
   index: number;
@@ -33,6 +34,7 @@ type PageConfigPanelProps = {
   onPreview: () => void;
   onDuplicate: () => void;
   onRemove: () => void;
+  onApplyPreset: (preset: RadarPreset) => void;
   canRemove: boolean;
   globalOverrideEnabled?: Record<string, boolean>;
   onToggleIgnoreOverride?: (path: string, ignored: boolean) => void;
@@ -94,6 +96,7 @@ export const PageConfigPanel: React.FC<PageConfigPanelProps> = ({
   onPreview,
   onDuplicate,
   onRemove,
+  onApplyPreset,
   canRemove,
   globalOverrideEnabled,
   onToggleIgnoreOverride,
@@ -103,12 +106,11 @@ export const PageConfigPanel: React.FC<PageConfigPanelProps> = ({
     .map((p, i) => ({ index: i, label: p.characterName }))
     .filter((s) => s.index !== index);
 
-  const fromSource = (
-    cb: (src: RadarVideoProps) => void,
-  ) => (sourceIndex: number) => {
-    const src = allPages[sourceIndex];
-    if (src) cb(src);
-  };
+  const fromSource =
+    (cb: (src: RadarVideoProps) => void) => (sourceIndex: number) => {
+      const src = allPages[sourceIndex];
+      if (src) cb(src);
+    };
 
   const importFontSize = fromSource((src) =>
     onUpdate({
@@ -203,7 +205,10 @@ export const PageConfigPanel: React.FC<PageConfigPanelProps> = ({
             </span>
           )}
         </div>
-        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="flex items-center gap-1"
+          onClick={(e) => e.stopPropagation()}
+        >
           <button
             type="button"
             onClick={onPreview}
@@ -273,6 +278,7 @@ export const PageConfigPanel: React.FC<PageConfigPanelProps> = ({
           <ThemeEditor
             theme={page.theme}
             onChange={(theme) => onUpdate({ theme })}
+            onApplyPreset={onApplyPreset}
             importMenu={menu(importTheme)}
           />
           <Separator />

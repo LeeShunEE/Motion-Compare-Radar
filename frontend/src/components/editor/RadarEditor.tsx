@@ -14,6 +14,7 @@ import { FileManagerPanel } from "../files/FileManagerPanel";
 import { TaskQueuePanel } from "../tasks/TaskQueuePanel";
 import { FieldFocusProvider } from "./FieldFocusContext";
 import { applyGlobalOverride } from "../../lib/global-override";
+import { applyPresetToConfig } from "../../lib/apply-preset";
 import {
   duplicatePageInSequence,
   removePageFromSequence,
@@ -22,6 +23,7 @@ import {
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../ui/tabs";
 import { useAutoSave } from "../../hooks/useAutoSave";
 import type { MultiPageConfig, RadarVideoProps } from "../../types/radar";
+import type { RadarPreset } from "../../types/presets";
 import { defaultMultiPageConfig, defaultRadarProps } from "../../types/constants";
 
 export const RadarEditor: React.FC = () => {
@@ -136,6 +138,10 @@ export const RadarEditor: React.FC = () => {
     },
     [],
   );
+
+  const applyPreset = useCallback((preset: RadarPreset) => {
+    setConfig((current) => applyPresetToConfig(current, preset));
+  }, []);
 
   const addPage = () => {
     setConfig((prev) => ({
@@ -332,6 +338,7 @@ export const RadarEditor: React.FC = () => {
                     }}
                     onDuplicate={() => duplicatePage(i)}
                     onRemove={() => removePage(i)}
+                    onApplyPreset={applyPreset}
                     canRemove={config.pages.length > 1}
                     globalOverrideEnabled={config.globalOverride?.enabled}
                     onToggleIgnoreOverride={(path, ignored) => toggleIgnoreOverride(i, path, ignored)}
