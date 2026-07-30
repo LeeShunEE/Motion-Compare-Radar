@@ -1,0 +1,180 @@
+name: Release
+
+# 发版门禁：仅在 main 上「CI」workflow 成功结束后才评估是否创建 GitHub Release。
+# - 不在 merge 瞬间发版（push 后先跑 CI）
+# - PR 上的 CI 绿只允许合并；发版看 merge 之后 main 上那一次 CI
+# - 仅当 frontend/package.json 的 version 相对父提交发生变化时创建 vX.Y.Z
+# - 创建 published Release 后由 deploy.yml 触发 Coolify（现有链路不动）
+#
+# 见 CONTRIBUTING.md §10。
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+  # 补发/运维兜底（例如 workflow 上线前已 bump 但未建 Release 的版本）
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Semver without v prefix (empty = use frontend/package.json)"
+        required: false
+        type: string
+        default: ""
+
+concurrency:
+  group: release-main
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    # workflow_run：只处理 main 上 push 触发的、且成功的 CI
+    # workflow_dispatch：维护者手动补发
+    if: >
+      github.event_name == 'workflow_dispatch'
+      || (
+        github.event.workflow_run.conclusion == 'success'
+        && github.event.workflow_run.event == 'push'
+        && github.event.workflow_run.head_branch == 'main'
+      )
+
+    steps:
+      - name: Resolve target SHA
+        id: sha
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "sha=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "sha=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout commit under test
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.sha.outputs.sha }}
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Detect version change / resolve target version
+        id: ver
+        run: |
+          set -euo pipefail
+
+          pkg_ver="$(jq -r .version frontend/package.json)"
+          if [ -z "$pkg_ver" ] || [ "$pkg_ver" = "null" ]; then
+            echo "::error::frontend/package.json version 无效"
+            exit 1
+          fi
+
+          # pyproject 项目版本（与 package.json 必须一致）
+          py_ver="$(sed -n 's/^version = "\(.*\)"/\1/p' backend/pyproject.toml | head -n1)"
+          if [ -z "$py_ver" ]; then
+            echo "::error::backend/pyproject.toml 缺少 version 字段"
+            exit 1
+          fi
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            input_ver="${{ inputs.version }}"
+            if [ -n "$input_ver" ]; then
+              new_ver="$input_ver"
+            else
+              new_ver="$pkg_ver"
+            fi
+            # 手动补发：允许当前 HEAD 已是该版本（不要求相对父提交变化）
+            if [ "$pkg_ver" != "$new_ver" ]; then
+              echo "::error::frontend/package.json version ($pkg_ver) 与输入版本 ($new_ver) 不一致"
+              exit 1
+            fi
+            if [ "$py_ver" != "$new_ver" ]; then
+              echo "::error::backend/pyproject.toml version ($py_ver) 与目标版本 ($new_ver) 不一致"
+              exit 1
+            fi
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+            echo "version=$new_ver" >> "$GITHUB_OUTPUT"
+            echo "Manual release candidate: v$new_ver @ ${{ steps.sha.outputs.sha }}"
+            exit 0
+          fi
+
+          # workflow_run 路径：仅当 version 相对父提交变化时发版
+          if git rev-parse --verify HEAD^ >/dev/null 2>&1; then
+            old_ver="$(git show HEAD^:frontend/package.json | jq -r .version)"
+          else
+            old_ver=""
+          fi
+
+          echo "package.json version: parent=${old_ver:-<none>} current=$pkg_ver"
+          echo "pyproject.toml version: $py_ver"
+
+          if [ "$pkg_ver" = "$old_ver" ]; then
+            echo "Version unchanged — skip release"
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+            echo "version=$pkg_ver" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "$py_ver" != "$pkg_ver" ]; then
+            echo "::error::frontend/package.json ($pkg_ver) 与 backend/pyproject.toml ($py_ver) 版本不一致，拒绝发版"
+            exit 1
+          fi
+
+          echo "should_release=true" >> "$GITHUB_OUTPUT"
+          echo "version=$pkg_ver" >> "$GITHUB_OUTPUT"
+
+      - name: Skip if tag or release already exists
+        id: exists
+        if: steps.ver.outputs.should_release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          ver="${{ steps.ver.outputs.version }}"
+          tag="v${ver}"
+
+          if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null 2>&1; then
+            echo "Tag ${tag} already exists — skip"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release ${tag} already exists — skip"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        if: >
+          steps.ver.outputs.should_release == 'true'
+          && steps.exists.outputs.skip == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          ver="${{ steps.ver.outputs.version }}"
+          tag="v${ver}"
+          sha="${{ steps.sha.outputs.sha }}"
+
+          # 找上一语义 tag（用于 notes 范围）；没有则让 gh 自生成从仓库起点的 notes
+          prev_tag="$(git tag --list 'v*' --sort=-v:refname | head -n1 || true)"
+          notes_args=(--generate-notes)
+          if [ -n "$prev_tag" ] && [ "$prev_tag" != "$tag" ]; then
+            notes_args+=(--notes-start-tag "$prev_tag")
+          fi
+
+          gh release create "$tag" \
+            --target "$sha" \
+            --title "$tag" \
+            "${notes_args[@]}"
+
+          echo "Created release $tag at $sha"
+          if [ -n "$prev_tag" ]; then
+            echo "Notes range starts after $prev_tag"
+          fi
