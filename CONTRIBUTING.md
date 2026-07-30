@@ -146,19 +146,29 @@ config is injected by the test system, never hard-coded (see `CLAUDE.md` §3.3.1
 ### 10. Releases (maintainers)
 
 This project follows [Semantic Versioning](https://semver.org/). Releases are
-cut by maintainers:
+cut by maintainers.
+
+**Version bumps must go through a PR — never push release commits straight to
+`main`.** Branch protection and CI (including the lockfile drift guard) only run
+on PRs. Direct pushes to `main` bypass those checks and have already caused
+release failures (e.g. bumping `pyproject.toml` without regenerating `uv.lock`).
+Do not use admin bypass / rule-violation overrides for release work.
 
 ```bash
-# 1. Bump frontend/package.json `version` to target version — the deploy workflow
-#    guards that the release tag matches it (and the footer version derives from
-#    it), so a missed bump fails the release.
-# 2. Generate merged PR list for LLM summarization:
+# 1. Open a release PR (do not commit version bumps on main):
+#    - Bump frontend/package.json `version` to the target version — the deploy
+#      workflow guards that the release tag matches it (and the footer version
+#      derives from it), so a missed bump fails the release.
+#    - If backend/pyproject.toml version is bumped too, run `uv lock` in
+#      backend/ and commit uv.lock (and requirements*.txt if deps changed; §7).
+#    - Wait for CI green, then merge the PR into main.
+# 2. On main HEAD after the merge, generate the merged PR list for LLM notes:
 python scripts/gen-release-notes.py --from-tag <prev-tag> > pr-list.md
 #    For first release (no prev-tag), omit --from-tag:
 #    python scripts/gen-release-notes.py > pr-list.md
 # 3. Summarize pr-list.md with LLM → release-notes.md (group by type: Features,
 #    Bug Fixes, Documentation, etc.; format as Keep a Changelog).
-# 4. Tag and push:
+# 4. Tag the merged main commit (not the pre-merge branch tip) and push:
 git tag -a v0.1.0 -m "v0.1.0" && git push origin v0.1.0
 # 5. Create release with summarized notes:
 gh release create v0.1.0 --notes-file release-notes.md --title "v0.1.0"
@@ -293,18 +303,27 @@ cd frontend && pnpm test:unit && pnpm test:integration
 
 ### 10. 发布（维护者）
 
-本项目遵循[语义化版本](https://semver.org/lang/zh-CN/)。由维护者发布：
+本项目遵循[语义化版本](https://semver.org/lang/zh-CN/)。由维护者发布。
+
+**版本 bump 必须走 PR，禁止把发版相关提交直推 `main`。** 分支保护与 CI（含
+lockfile 漂移守卫）只在 PR 上生效；直推 `main` 会绕过这些检查，已实际导致发版
+失败（例如只改 `pyproject.toml` 却未重生 `uv.lock`）。发版时**不得**使用管理员
+bypass / 规则豁免。
 
 ```bash
-# 1. 先把 frontend/package.json 的 `version` bump 到目标版本——deploy workflow 会校验
-#    release tag 与之一致（页脚版本号也由它派生），漏 bump 会让发版失败。
-# 2. 生成 merged PR 列表供 LLM 总结：
+# 1. 先开 release PR（不要在 main 上直接 commit 版本号）：
+#    - 把 frontend/package.json 的 `version` bump 到目标版本——deploy workflow 会校验
+#      release tag 与之一致（页脚版本号也由它派生），漏 bump 会让发版失败。
+#    - 若同时 bump backend/pyproject.toml 版本，须在 backend/ 下执行 `uv lock` 并提交
+#      uv.lock（依赖变更时再按 §7 重生 requirements*.txt）。
+#    - 等 CI 全绿后合并进 main。
+# 2. 在合并后的 main HEAD 上生成 merged PR 列表供 LLM 总结：
 python scripts/gen-release-notes.py --from-tag <上一个tag> > pr-list.md
 #    首个版本（无上一个tag）时省略 --from-tag：
 #    python scripts/gen-release-notes.py > pr-list.md
 # 3. 用 LLM 总结 pr-list.md → release-notes.md（按类型分组：Features、Bug Fixes、
 #    Documentation 等；格式参考 Keep a Changelog）。
-# 4. 打 tag 并推送：
+# 4. 在已合并的 main commit 上打 tag 并推送（不要打在合并前的分支 tip）：
 git tag -a v0.1.0 -m "v0.1.0" && git push origin v0.1.0
 # 5. 用总结后的 notes 创建 release：
 gh release create v0.1.0 --notes-file release-notes.md --title "v0.1.0"

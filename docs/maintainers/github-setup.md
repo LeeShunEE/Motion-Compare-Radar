@@ -64,9 +64,13 @@ gh issue create --repo LeeShunEE/Radar-Renderer \
 
 ## 7. First release / 首个发布
 
-When the backend MVP and docs land:
+When the backend MVP and docs land, follow [`CONTRIBUTING.md`](../../CONTRIBUTING.md)
+§10 end-to-end. **Version bumps must go through a PR** (never push release commits
+straight to `main` / 版本 bump 必须走 PR，禁止直推 `main`); tag and
+`gh release create` only after the PR is merged and CI has passed on that path.
 
 ```bash
+# After the release PR is merged into main:
 git tag -a v0.1.0 -m "v0.1.0"
 git push origin v0.1.0
 python scripts/gen-release-notes.py > pr-list.md
