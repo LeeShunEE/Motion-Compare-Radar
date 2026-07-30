@@ -115,11 +115,12 @@ class TestDeleteForUser:
         dao = AsyncMock()
         dao.get_for_user.return_value = _make_task(status=RenderStatus.QUEUED)
         queue = MagicMock()
+        queue.cancel = AsyncMock()
         service = _make_service(dao, queue)
 
         await service.delete_for_user(task_id=1, user_id=10)
 
-        queue.cancel.assert_called_once_with(1)
+        queue.cancel.assert_awaited_once_with(1)
         dao.delete.assert_awaited_once_with(1)
         queue.forget.assert_called_once_with(1)
 

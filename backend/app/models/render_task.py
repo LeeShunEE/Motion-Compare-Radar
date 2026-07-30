@@ -46,6 +46,7 @@ class RenderTask(BaseModel):
     created_at: datetime
     started_at: datetime | None = None
     finished_at: datetime | None = None
+    retry_of_task_id: int | None = None
 
     @property
     def is_active(self) -> bool:

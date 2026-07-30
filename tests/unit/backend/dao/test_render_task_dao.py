@@ -1,12 +1,13 @@
 """RenderTaskDAO 单元测试。"""
 
-import pytest
-from datetime import datetime, UTC, timedelta
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock
 
-from app.dao.render_task_dao import RenderTaskDAO, _to_domain
+import pytest
+
 from app.dao.orm import RenderTaskORM
-from app.models.render_task import RenderMode, RenderStatus, Codec, RenderTask
+from app.dao.render_task_dao import RenderTaskDAO, _to_domain
+from app.models.render_task import Codec, RenderMode, RenderStatus, RenderTask
 
 
 @pytest.fixture
@@ -181,6 +182,47 @@ class TestGet:
 
         task = await dao.get(999)
         assert task is None
+
+
+class TestConditionalTerminalTransitions:
+    async def test_mark_running_if_queued_filters_current_status(
+        self, dao: RenderTaskDAO, mock_session: AsyncMock
+    ) -> None:
+        result = MagicMock()
+        result.rowcount = 0
+        mock_session.execute = AsyncMock(return_value=result)
+
+        updated = await dao.mark_running_if_queued(7)
+
+        statement = mock_session.execute.await_args.args[0]
+        assert "render_tasks.status" in str(statement)
+        assert updated is False
+
+    async def test_mark_done_if_running_filters_current_status(
+        self, dao: RenderTaskDAO, mock_session: AsyncMock
+    ) -> None:
+        result = MagicMock()
+        result.rowcount = 0
+        mock_session.execute = AsyncMock(return_value=result)
+
+        updated = await dao.mark_done_if_running(7, "/output/7.mp4", 1200)
+
+        statement = mock_session.execute.await_args.args[0]
+        sql = str(statement)
+        assert "render_tasks.status" in sql
+        assert updated is False
+        mock_session.commit.assert_awaited_once()
+
+    async def test_mark_failed_if_running_reports_update(
+        self, dao: RenderTaskDAO, mock_session: AsyncMock
+    ) -> None:
+        result = MagicMock()
+        result.rowcount = 1
+        mock_session.execute = AsyncMock(return_value=result)
+
+        updated = await dao.mark_failed_if_running(7, "worker timeout")
+
+        assert updated is True
 
 
 class TestGetForUser:

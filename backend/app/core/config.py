@@ -42,6 +42,8 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60 * 24
     jwt_refresh_expire_minutes: int = 60 * 24 * 7
+    # 仅当数据库尚无管理员时，匹配邮箱的成功登录用户可完成首次引导。
+    initial_admin_email: str | None = None
 
     # 验证码
     verification_code_expire_minutes: int = 10
@@ -83,6 +85,7 @@ class Settings(BaseSettings):
     public_assets_path: Path = Path(
         os.getenv("PUBLIC_ASSETS_PATH", str(_BACKEND_ROOT / ".." / "frontend" / "public"))
     )
+    max_public_asset_bytes: int = 100 * 1024 * 1024
 
     # 背景媒体零拷贝（方案 B）：worker 是否已将 backend_storage 只读挂载到其
     # publicDir/_user_media。这是**部署事实**，必须由 backend 经配置得知——backend
@@ -106,6 +109,7 @@ class Settings(BaseSettings):
     output_gc_interval_seconds: int = 3600  # GC 周期（秒），默认 1 小时
     output_gc_max_age_days: int = 7  # 产物保留天数
     output_gc_global_max_size_bytes: int = 10 * 1024 * 1024 * 1024  # 全局 outputs 目录最大大小（10GB）
+    audit_retention_days: int = 180
 
     # 测试环境标识（启用测试端点，生产必须 false）
     testing: bool = False

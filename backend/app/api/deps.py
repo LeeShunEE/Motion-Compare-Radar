@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_session
-from app.core.exceptions import AuthError
+from app.core.exceptions import AccountDisabledError, AdminRequiredError, AuthError
 from app.core.security import TokenType, decode_token
 from app.models.user import User
 from app.service.user_service import UserService
@@ -30,7 +30,29 @@ async def get_current_user(
     return await UserService(session).get_by_id(user_id)
 
 
-CurrentUserDep = Annotated[User, Depends(get_current_user)]
+AuthenticatedUserDep = Annotated[User, Depends(get_current_user)]
+
+
+async def get_current_active_user(current_user: AuthenticatedUserDep) -> User:
+    """拒绝已停用账号，使状态变更对现有 JWT 立即生效。"""
+    if not current_user.is_active:
+        raise AccountDisabledError("账号已停用")
+    return current_user
+
+
+CurrentActiveUserDep = Annotated[User, Depends(get_current_active_user)]
+# 现有受保护路由自动获得 active 校验，保持公开依赖名称兼容。
+CurrentUserDep = CurrentActiveUserDep
+
+
+async def get_current_admin(current_user: CurrentActiveUserDep) -> User:
+    """要求当前 active 用户具有管理员权限。"""
+    if not current_user.is_admin:
+        raise AdminRequiredError("需要管理员权限")
+    return current_user
+
+
+CurrentAdminDep = Annotated[User, Depends(get_current_admin)]
 
 
 async def verify_render_callback_token(
@@ -44,7 +66,11 @@ async def verify_render_callback_token(
 
 __all__ = [
     "CurrentUserDep",
+    "CurrentActiveUserDep",
+    "CurrentAdminDep",
     "SessionDep",
+    "get_current_active_user",
+    "get_current_admin",
     "get_current_user",
     "get_session",
     "verify_render_callback_token",

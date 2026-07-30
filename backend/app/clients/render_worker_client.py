@@ -8,7 +8,7 @@ worker 负责真正的 Remotion ``bundle`` + ``renderMedia``；本客户端只�
 from typing import Any
 
 import httpx
-from pydantic import BaseModel
+from pydantic import BaseModel, SecretStr
 
 from app.core.exceptions import RenderFailedError
 
@@ -36,9 +36,19 @@ class WorkerRenderResult(BaseModel):
 class RenderWorkerClient:
     """Node 渲染 worker 的 async 客户端。"""
 
-    def __init__(self, base_url: str, timeout_seconds: int) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        timeout_seconds: int,
+        token_secret_string: SecretStr = SecretStr("dev-only-render-callback-token"),
+    ) -> None:
         self._base_url = base_url.rstrip("/")
         self._timeout = timeout_seconds
+        self._token_secret_string = token_secret_string
+
+    def _authorization_headers(self) -> dict[str, str]:
+        token = self._token_secret_string.get_secret_value()
+        return {"Authorization": f"Bearer {token}"}
 
     async def render(self, request: WorkerRenderRequest) -> WorkerRenderResult:
         """提交一次渲染；非 2xx 或网络错误均抛 ``RenderFailedError``。"""
@@ -51,7 +61,11 @@ class RenderWorkerClient:
         }
         try:
             async with httpx.AsyncClient(timeout=self._timeout) as client:
-                resp = await client.post(f"{self._base_url}/render", json=payload)
+                resp = await client.post(
+                    f"{self._base_url}/render",
+                    json=payload,
+                    headers=self._authorization_headers(),
+                )
         except httpx.HTTPError as e:
             raise RenderFailedError(f"渲染 worker 不可达: {e}") from e
 
@@ -65,3 +79,24 @@ class RenderWorkerClient:
             duration_ms=int(data.get("durationMs", 0)),
             total_frames=int(data.get("totalFrames", 0)),
         )
+
+    async def health(self) -> bool:
+        """短超时探测 worker；任何网络或非 2xx 结果均返回不可用。"""
+        try:
+            async with httpx.AsyncClient(timeout=min(self._timeout, 3)) as client:
+                response = await client.get(f"{self._base_url}/health")
+        except httpx.HTTPError:
+            return False
+        return response.status_code == httpx.codes.OK
+
+    async def cancel(self, task_id: int) -> bool:
+        """通知 worker 中止运行中的 Remotion 渲染；任务未运行时返回 ``False``。"""
+        try:
+            async with httpx.AsyncClient(timeout=min(self._timeout, 3)) as client:
+                response = await client.delete(
+                    f"{self._base_url}/render/{task_id}",
+                    headers=self._authorization_headers(),
+                )
+        except httpx.HTTPError:
+            return False
+        return response.status_code == httpx.codes.ACCEPTED

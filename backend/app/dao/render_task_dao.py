@@ -7,7 +7,7 @@
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dao.orm import RenderTaskORM
@@ -28,6 +28,7 @@ def _to_domain(orm: RenderTaskORM) -> RenderTask:
         created_at=orm.created_at,
         started_at=orm.started_at,
         finished_at=orm.finished_at,
+        retry_of_task_id=orm.retry_of_task_id,
     )
 
 
@@ -49,6 +50,7 @@ class RenderTaskDAO:
         codec: Codec,
         input_props: dict[str, Any],
         output_path: str,
+        retry_of_task_id: int | None = None,
     ) -> RenderTask:
         orm = RenderTaskORM(
             user_id=user_id,
@@ -57,6 +59,7 @@ class RenderTaskDAO:
             status=RenderStatus.QUEUED.value,
             input_props=input_props,
             output_path=output_path,
+            retry_of_task_id=retry_of_task_id,
         )
         self._session.add(orm)
         await self._session.commit()
@@ -91,16 +94,93 @@ class RenderTaskDAO:
         )
         return list((await self._session.execute(stmt)).scalars().all())
 
+    async def list_global(
+        self,
+        *,
+        user_id: int | None,
+        status: RenderStatus | None,
+        mode: RenderMode | None,
+        codec: Codec | None,
+        offset: int,
+        limit: int,
+    ) -> tuple[list[RenderTask], int]:
+        filters = []
+        if user_id is not None:
+            filters.append(RenderTaskORM.user_id == user_id)
+        if status is not None:
+            filters.append(RenderTaskORM.status == status.value)
+        if mode is not None:
+            filters.append(RenderTaskORM.mode == mode.value)
+        if codec is not None:
+            filters.append(RenderTaskORM.codec == codec.value)
+        count_stmt = select(func.count(RenderTaskORM.id)).where(*filters)
+        total = int((await self._session.execute(count_stmt)).scalar_one())
+        stmt = (
+            select(RenderTaskORM)
+            .where(*filters)
+            .order_by(RenderTaskORM.created_at.desc(), RenderTaskORM.id.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        rows = (await self._session.execute(stmt)).scalars().all()
+        return [_to_domain(row) for row in rows], total
+
+    async def list_created_since(self, cutoff: datetime) -> list[RenderTask]:
+        stmt = (
+            select(RenderTaskORM)
+            .where(RenderTaskORM.created_at >= cutoff)
+            .order_by(RenderTaskORM.created_at.desc())
+        )
+        rows = (await self._session.execute(stmt)).scalars().all()
+        return [_to_domain(row) for row in rows]
+
+    async def list_recent_failed(self, limit: int = 10) -> list[RenderTask]:
+        stmt = (
+            select(RenderTaskORM)
+            .where(RenderTaskORM.status == RenderStatus.FAILED.value)
+            .order_by(RenderTaskORM.created_at.desc())
+            .limit(limit)
+        )
+        rows = (await self._session.execute(stmt)).scalars().all()
+        return [_to_domain(row) for row in rows]
+
     async def _set_status(self, task_id: int, **values: Any) -> None:  # noqa: ANN401
         await self._session.execute(
             update(RenderTaskORM).where(RenderTaskORM.id == task_id).values(**values)
         )
         await self._session.commit()
 
+    async def _set_status_if_running(
+        self, task_id: int, **values: Any  # noqa: ANN401
+    ) -> bool:
+        result = await self._session.execute(
+            update(RenderTaskORM)
+            .where(
+                RenderTaskORM.id == task_id,
+                RenderTaskORM.status == RenderStatus.RUNNING.value,
+            )
+            .values(**values)
+        )
+        await self._session.commit()
+        return result.rowcount == 1
+
     async def mark_running(self, task_id: int) -> None:
         await self._set_status(
             task_id, status=RenderStatus.RUNNING.value, started_at=_utcnow()
         )
+
+    async def mark_running_if_queued(self, task_id: int) -> bool:
+        """仅将仍在排队的任务置为运行，避免覆盖并发取消。"""
+        result = await self._session.execute(
+            update(RenderTaskORM)
+            .where(
+                RenderTaskORM.id == task_id,
+                RenderTaskORM.status == RenderStatus.QUEUED.value,
+            )
+            .values(status=RenderStatus.RUNNING.value, started_at=_utcnow())
+        )
+        await self._session.commit()
+        return result.rowcount == 1
 
     async def mark_done(
         self, task_id: int, output_path: str, duration_ms: int
@@ -113,8 +193,29 @@ class RenderTaskDAO:
             finished_at=_utcnow(),
         )
 
+    async def mark_done_if_running(
+        self, task_id: int, output_path: str, duration_ms: int
+    ) -> bool:
+        """仅将仍在运行的任务置为完成，避免覆盖并发取消。"""
+        return await self._set_status_if_running(
+            task_id,
+            status=RenderStatus.DONE.value,
+            output_path=output_path,
+            duration_ms=duration_ms,
+            finished_at=_utcnow(),
+        )
+
     async def mark_failed(self, task_id: int, error: str) -> None:
         await self._set_status(
+            task_id,
+            status=RenderStatus.FAILED.value,
+            error=error,
+            finished_at=_utcnow(),
+        )
+
+    async def mark_failed_if_running(self, task_id: int, error: str) -> bool:
+        """仅将仍在运行的任务置为失败，避免覆盖并发取消。"""
+        return await self._set_status_if_running(
             task_id,
             status=RenderStatus.FAILED.value,
             error=error,

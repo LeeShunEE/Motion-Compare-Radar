@@ -78,7 +78,10 @@ class UserResponse(BaseModel):
     username: str | None = None
     email: EmailStr
     is_verified: bool = False
+    is_admin: bool = False
+    is_active: bool = True
     display_name: str | None = None
+    last_login_at: datetime | None = None
     created_at: datetime
 
     @classmethod
@@ -88,7 +91,10 @@ class UserResponse(BaseModel):
             username=user.username,
             email=user.email,
             is_verified=user.is_verified,
+            is_admin=user.is_admin,
+            is_active=user.is_active,
             display_name=user.display_name,
+            last_login_at=user.last_login_at,
             created_at=user.created_at,
         )
 

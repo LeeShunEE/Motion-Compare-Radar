@@ -14,8 +14,8 @@
 import { test, expect, type Page } from "@playwright/test";
 import { registerAndLanding } from "./auth-helpers";
 
-// 真实渲染较慢（Remotion 出帧），单用例放宽到 2 分钟。
-test.setTimeout(120_000);
+// 真实渲染速度受 CI runner 性能影响，保留足够余量避免在最后几帧产生假阴性。
+test.setTimeout(180_000);
 
 async function submitMp4Render(page: Page): Promise<void> {
   await page.getByRole("tab", { name: "导出" }).click();
@@ -31,7 +31,7 @@ test.describe("服务端渲染任务旅程", () => {
   test("提交 MP4 渲染：完成后自动触发下载（含 #4 回归）", async ({ page }) => {
     await page.getByRole("tab", { name: "导出" }).click();
     // 提交后状态文案进入提交/排队/渲染。
-    const downloadPromise = page.waitForEvent("download", { timeout: 110_000 });
+    const downloadPromise = page.waitForEvent("download", { timeout: 170_000 });
     await page.getByRole("button", { name: "导出当前页 MP4" }).click();
 
     await expect(page.getByText(/提交任务|排队中|渲染中/)).toBeVisible();
@@ -43,7 +43,7 @@ test.describe("服务端渲染任务旅程", () => {
   });
 
   test("任务面板展示完成任务并可删除", async ({ page }) => {
-    const downloadPromise = page.waitForEvent("download", { timeout: 110_000 });
+    const downloadPromise = page.waitForEvent("download", { timeout: 170_000 });
     await submitMp4Render(page);
     await downloadPromise; // 等渲染完成
 

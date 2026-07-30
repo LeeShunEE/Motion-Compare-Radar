@@ -16,10 +16,16 @@ import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import { bundle } from "@remotion/bundler";
-import { renderMedia, selectComposition } from "@remotion/renderer";
+import { makeCancelSignal, renderMedia, selectComposition } from "@remotion/renderer";
 // 复用 frontend/src/remotion 的 webpack 覆盖（启用 Tailwind v4），
 // 否则 src/remotion/index.ts 里的 `@import "tailwindcss"` 无法被处理。
 import { webpackOverride } from "../src/remotion/webpack-override.mjs";
+import {
+  cancelActiveRender,
+  registerActiveRender,
+  unregisterActiveRender,
+} from "./render-cancellation.mjs";
+import { isWorkerAuthorized } from "./worker-auth.mjs";
 
 // 与 frontend/src/types/constants.ts 的 COMP_NAME / MULTI_COMP_NAME 保持一致。
 // 此处内联以让 worker 在纯 node 下运行（无需 TS loader）；Remotion bundler 自行处理组件 TS 树。
@@ -172,20 +178,27 @@ async function handleRender(body) {
     composition.durationInFrames,
   );
   const startedAt = Date.now();
-  await renderMedia({
-    composition,
-    serveUrl,
-    codec: codec === "gif" ? "gif" : "h264",
-    outputLocation: outputPath,
-    inputProps,
-    concurrency: null,
-    // 容器内无 GPU：OffthreadVideo 视频背景抽帧若走硬件解码会令 Remotion 合成器
-    // SIGSEGV（图片/剪影不触发，因不经视频解码路径）。显式禁用硬解，纯软件解码稳定。
-    hardwareAcceleration: "disable",
-    chromiumOptions,
-    browserExecutable: BROWSER_EXECUTABLE,
-    onProgress: reportProgress,
-  });
+  const { cancelSignal, cancel } = makeCancelSignal();
+  registerActiveRender(taskId, cancel);
+  try {
+    await renderMedia({
+      composition,
+      serveUrl,
+      codec: codec === "gif" ? "gif" : "h264",
+      outputLocation: outputPath,
+      inputProps,
+      concurrency: null,
+      cancelSignal,
+      // 容器内无 GPU：OffthreadVideo 视频背景抽帧若走硬件解码会令 Remotion 合成器
+      // SIGSEGV（图片/剪影不触发，因不经视频解码路径）。显式禁用硬解，纯软件解码稳定。
+      hardwareAcceleration: "disable",
+      chromiumOptions,
+      browserExecutable: BROWSER_EXECUTABLE,
+      onProgress: reportProgress,
+    });
+  } finally {
+    unregisterActiveRender(taskId);
+  }
 
   // durationMs 为 wall-clock 渲染耗时，totalFrames 供后端计算平均渲速（fps）。
   return {
@@ -205,6 +218,26 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  const cancelMatch = urlPath.match(/^\/render\/(\d+)$/);
+  const isWorkerWrite =
+    (req.method === "POST" && urlPath === "/render") ||
+    (req.method === "DELETE" && cancelMatch !== null);
+  if (
+    isWorkerWrite &&
+    !isWorkerAuthorized(req.headers.authorization, RENDER_CALLBACK_TOKEN)
+  ) {
+    res.writeHead(401, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "unauthorized" }));
+    return;
+  }
+
+  if (req.method === "DELETE" && cancelMatch) {
+    const canceled = cancelActiveRender(Number(cancelMatch[1]));
+    res.writeHead(canceled ? 202 : 404, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ canceled }));
+    return;
+  }
+
   // 静态文件服务：_user_media 与 _render_tmp
   if (req.method === "GET" && (urlPath.startsWith("/_user_media/") || urlPath.startsWith("/_render_tmp/"))) {
     serveStaticFile(urlPath, res);
@@ -217,8 +250,9 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  let body;
   try {
-    const body = await readJson(req);
+    body = await readJson(req);
     const result = await handleRender(body);
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify(result));
@@ -226,6 +260,8 @@ const server = http.createServer(async (req, res) => {
     console.error("render error:", error);
     res.writeHead(500, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: error?.message ?? "render failed" }));
+  } finally {
+    if (Number.isInteger(body?.taskId)) unregisterActiveRender(body.taskId);
   }
 });
 

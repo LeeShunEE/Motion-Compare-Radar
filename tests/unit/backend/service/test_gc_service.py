@@ -18,6 +18,7 @@ from app.service.gc_service import OutputGCService
 
 
 def _make_config(
+    *,
     gc_enabled: bool = True,
     gc_interval: int = 3600,
     gc_max_age_days: int = 7,
@@ -161,6 +162,28 @@ class TestCleanupExpiredByTime:
 
         assert deleted == []
         output_path.unlink.assert_not_called()
+
+
+class TestCleanupAuditEvents:
+    """审计事件按独立留存周期清理。"""
+
+    async def test_deletes_events_older_than_retention(self) -> None:
+        gc = _make_gc_service(
+            config=Settings(
+                output_gc_enabled=True,
+                audit_retention_days=180,
+            )
+        )
+        audit_dao = MagicMock()
+        audit_dao.delete_before = AsyncMock(return_value=4)
+
+        with patch("app.service.gc_service.AuditEventDAO", return_value=audit_dao):
+            deleted = await gc._cleanup_expired_audit_events()
+
+        assert deleted == 4
+        cutoff = audit_dao.delete_before.await_args.args[0]
+        expected = datetime.now(tz=UTC) - timedelta(days=180)
+        assert abs((cutoff - expected).total_seconds()) < 2
 
 
 class TestCleanupByGlobalQuota:

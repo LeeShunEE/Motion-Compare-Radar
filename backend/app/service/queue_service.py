@@ -18,6 +18,8 @@ from app.core.config import settings
 from app.core.database import async_session_factory
 from app.core.exceptions import RenderFailedError
 from app.dao.render_task_dao import RenderTaskDAO
+from app.models.admin_render import QueueTaskSnapshot, RenderQueueSnapshot
+from app.models.render_task import RenderStatus
 from app.service.silhouette_rewrite import cleanup_render_tmp
 
 # 没有历史样本时的单任务耗时兜底估计（秒）。
@@ -55,11 +57,14 @@ class RenderQueue:
         self._pending.append(task_id)
         self._queue.put_nowait(task_id)
 
-    def cancel(self, task_id: int) -> None:
-        """标记取消：排队中的会被消费者跳过，运行中的会在渲染结束后丢弃产物。"""
+    async def cancel(self, task_id: int) -> None:
+        """标记取消，并通知 worker 立即释放运行中的 Remotion 资源。"""
+        is_running = task_id in self._running
         self._canceled.add(task_id)
         if task_id in self._pending:
             self._pending.remove(task_id)
+        if is_running:
+            await self._worker.cancel(task_id)
 
     def forget(self, task_id: int) -> None:
         """从内存态彻底移除（删除任务时调用）。"""
@@ -107,6 +112,35 @@ class RenderQueue:
 
     def queue_size(self) -> int:
         return len(self._pending) + len(self._running)
+
+    def admin_snapshot(self) -> RenderQueueSnapshot:
+        """复制当前队列状态，避免向管理接口暴露可变内部容器。"""
+        tasks = [
+            QueueTaskSnapshot(
+                task_id=task_id,
+                status=RenderStatus.RUNNING,
+                position=0,
+                rendered_frames=self._progress.get(task_id, (None, None))[0],
+                total_frames=self._progress.get(task_id, (None, None))[1],
+                eta_seconds=self.eta_seconds(task_id),
+            )
+            for task_id in self._running
+        ]
+        tasks.extend(
+            QueueTaskSnapshot(
+                task_id=task_id,
+                status=RenderStatus.QUEUED,
+                position=position,
+                eta_seconds=self.eta_seconds(task_id),
+            )
+            for position, task_id in enumerate(self._pending, start=1)
+        )
+        return RenderQueueSnapshot(
+            concurrency=self._concurrency,
+            queue_size=len(tasks),
+            avg_fps=self.average_fps(),
+            tasks=tasks,
+        )
 
     def position(self, task_id: int) -> int:
         """1 基排位（排队中）；运行中或已结束返回 0。"""
@@ -173,12 +207,17 @@ class RenderQueue:
         self._running[task_id] = time.monotonic()
         task = None
         try:
+            if task_id in self._canceled:
+                self._canceled.discard(task_id)
+                return
             async with self._session_factory() as session:
                 dao = RenderTaskDAO(session)
                 task = await dao.get(task_id)
                 if task is None:
                     return
-                await dao.mark_running(task_id)
+                if not await dao.mark_running_if_queued(task_id):
+                    self._canceled.discard(task_id)
+                    return
                 request = WorkerRenderRequest(
                     task_id=task_id,
                     mode=task.mode.value,
@@ -190,7 +229,11 @@ class RenderQueue:
                 try:
                     result = await self._worker.render(request)
                 except RenderFailedError as exc:
-                    await dao.mark_failed(task_id, exc.message)
+                    if task_id in self._canceled:
+                        self._canceled.discard(task_id)
+                        await dao.mark_canceled(task_id)
+                        return
+                    await dao.mark_failed_if_running(task_id, exc.message)
                     return
                 self._durations.append(time.monotonic() - started)
                 # 同一处记录渲速：用 worker 权威的帧数 + 渲染耗时，避免 fire-and-forget
@@ -200,7 +243,7 @@ class RenderQueue:
                     self._canceled.discard(task_id)
                     await dao.mark_canceled(task_id)
                     return
-                await dao.mark_done(
+                await dao.mark_done_if_running(
                     task_id, result.output_path, result.duration_ms
                 )
         finally:
@@ -215,7 +258,9 @@ class RenderQueue:
 render_queue = RenderQueue(
     concurrency=settings.render_concurrency,
     worker=RenderWorkerClient(
-        settings.worker_base_url, settings.render_timeout_seconds
+        settings.worker_base_url,
+        settings.render_timeout_seconds,
+        settings.render_callback_token_secret_string,
     ),
     session_factory=async_session_factory,
 )

@@ -21,7 +21,7 @@ def _make_service(dao: AsyncMock) -> VerificationService:
     return service
 
 
-def _orm(code: str = "123456", expired: bool = False) -> MagicMock:
+def _orm(code: str = "123456", *, expired: bool = False) -> MagicMock:
     mock_orm = MagicMock(spec=VerificationCodeORM)
     mock_orm.code = code
     mock_orm.expires_at = (

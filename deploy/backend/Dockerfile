@@ -124,7 +124,8 @@ RUN mkdir -p /app/storage && chown -R appuser:appgroup /app/storage
 # Without this the volume is created root-owned and renders with uploaded
 # silhouettes fail with PermissionError (silhouette_rewrite.py mkdir).
 # (Dev backend runs as root via the `development` target, so it never hit this.)
-RUN mkdir -p /app/public_assets/_render_tmp && chown -R appuser:appgroup /app/public_assets
+RUN mkdir -p /app/public_assets/silhouettes /app/public_assets/music /app/public_assets/_render_tmp \
+    && chown -R appuser:appgroup /app/public_assets
 
 # Switch to non-root user
 USER appuser

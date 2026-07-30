@@ -7,7 +7,9 @@ from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.exceptions import (
+    AccountDisabledError,
     AuthError,
     UserExistsError,
     UserNotFoundError,
@@ -17,7 +19,9 @@ from app.core.exceptions import (
 from app.core.security import hash_password, verify_password
 from app.dao.user_dao import UserDAO
 from app.dao.verification_dao import VerificationCodeDAO
+from app.models.audit_event import AuditAction
 from app.models.user import User
+from app.service.audit_service import AuditService
 from app.utils.datetime import ensure_utc
 
 
@@ -27,6 +31,21 @@ class AuthService:
     def __init__(self, session: AsyncSession) -> None:
         self._dao = UserDAO(session)
         self._verification_dao = VerificationCodeDAO(session)
+        self._audit = AuditService(session)
+
+    async def _complete_login(self, user_id: int) -> User:
+        user = await self._dao.record_successful_login(
+            user_id,
+            initial_admin_email=settings.initial_admin_email,
+        )
+        await self._audit.record(
+            AuditAction.AUTH_LOGIN_SUCCEEDED,
+            actor_user_id=user.id,
+            subject_user_id=user.id,
+            resource_type="user",
+            resource_id=str(user.id),
+        )
+        return user
 
     async def register_with_password(
         self, *, username: str, email: str, password: str
@@ -80,7 +99,7 @@ class AuthService:
             is_verified=True,
         )
 
-        return user
+        return await self._complete_login(user.id)
 
     async def authenticate(self, *, username: str | None = None, email: str | None = None, password: str) -> User:
         """校验账号口令，成功返回用户；失败抛 ``AuthError``。
@@ -113,7 +132,9 @@ class AuthService:
         user = await self._dao.get_by_id(credentials.user_id)
         if user is None:  # 极端竞态：凭据存在但用户被删
             raise AuthError("用户名/邮箱或密码错误")
-        return user
+        if not user.is_active:
+            raise AccountDisabledError("账号已停用")
+        return await self._complete_login(user.id)
 
     async def set_username(self, user_id: int, username: str) -> User:
         """设置用户名（OAuth 用户首次登录后设置）。"""

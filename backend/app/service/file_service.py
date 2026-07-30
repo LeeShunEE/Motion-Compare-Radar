@@ -73,6 +73,10 @@ class FileService:
             upload_limit=self._max_upload_count,
         )
 
+    def output_usage_bytes(self, user_id: int) -> int:
+        """返回用户渲染产物目录的当前占用字节数。"""
+        return directory_size(self.outputs_dir(user_id))
+
     def list_uploads(self, user_id: int) -> list[StoredFile]:
         """列出用户上传目录下的文件（按名称排序）。"""
         uploads = self._uploads_dir(user_id)
@@ -86,6 +90,11 @@ class FileService:
             if f.is_file()
         ]
         return sorted(files, key=lambda f: f.name)
+
+    def upload_exists(self, user_id: int, filename: str) -> bool:
+        """返回经过安全文件名校验的上传文件是否存在。"""
+        name = _validate_filename(filename)
+        return (self._uploads_dir(user_id) / name).is_file()
 
     def save_upload(self, user_id: int, filename: str, data: bytes) -> StoredFile:
         """保存上传文件；超配额时抛 ``QuotaExceededError``。

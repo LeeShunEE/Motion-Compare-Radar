@@ -4,7 +4,9 @@ DAO 层在 ``UserORM`` 与领域模型（``User`` / ``UserCredentials``）之间
 对上层只暴露领域模型，``*ORM`` 不越出本层。
 """
 
-from sqlalchemy import select
+from datetime import UTC, datetime
+
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dao.orm import UserORM
@@ -17,7 +19,10 @@ def _to_user(orm: UserORM) -> User:
         username=orm.username,
         email=orm.email,
         is_verified=orm.is_verified,
+        is_admin=orm.is_admin,
+        is_active=orm.is_active,
         display_name=orm.display_name,
+        last_login_at=orm.last_login_at,
         created_at=orm.created_at,
     )
 
@@ -148,3 +153,119 @@ class UserDAO:
         stmt = select(UserORM.id)
         rows = (await self._session.execute(stmt)).scalars().all()
         return list(rows)
+
+    async def list_all(self) -> list[User]:
+        """返回 Dashboard 聚合所需的全部用户公开领域模型。"""
+        rows = (await self._session.execute(select(UserORM))).scalars().all()
+        return [_to_user(row) for row in rows]
+
+    async def record_successful_login(
+        self, user_id: int, *, initial_admin_email: str | None
+    ) -> User:
+        """记录登录时间，并在系统无管理员时完成一次性管理员引导。"""
+        orm = await self._session.get(UserORM, user_id, with_for_update=True)
+        if orm is None:
+            raise ValueError(f"用户 {user_id} 不存在")
+
+        should_consider_bootstrap = (
+            initial_admin_email is not None
+            and orm.email.casefold() == initial_admin_email.casefold()
+            and not orm.is_admin
+        )
+        if should_consider_bootstrap:
+            admin_stmt = select(UserORM.id).where(UserORM.is_admin.is_(True)).limit(1)
+            existing_admin_id = (
+                await self._session.execute(admin_stmt)
+            ).scalar_one_or_none()
+            if existing_admin_id is None:
+                orm.is_admin = True
+
+        orm.last_login_at = datetime.now(tz=UTC)
+        await self._session.commit()
+        await self._session.refresh(orm)
+        return _to_user(orm)
+
+    async def list_filtered(
+        self,
+        *,
+        search: str | None,
+        is_admin: bool | None,
+        is_active: bool | None,
+        is_verified: bool | None,
+        offset: int,
+        limit: int,
+    ) -> tuple[list[User], int]:
+        """按管理条件分页查询用户。"""
+        filters = []
+        if search:
+            pattern = f"%{search.casefold()}%"
+            filters.append(
+                or_(
+                    func.lower(UserORM.email).like(pattern),
+                    func.lower(UserORM.username).like(pattern),
+                )
+            )
+        if is_admin is not None:
+            filters.append(UserORM.is_admin.is_(is_admin))
+        if is_active is not None:
+            filters.append(UserORM.is_active.is_(is_active))
+        if is_verified is not None:
+            filters.append(UserORM.is_verified.is_(is_verified))
+
+        stmt = select(UserORM).where(*filters)
+        count_stmt = select(func.count(UserORM.id)).where(*filters)
+        total = int((await self._session.execute(count_stmt)).scalar_one())
+        rows = (
+            await self._session.execute(
+                stmt.order_by(UserORM.id.desc()).offset(offset).limit(limit)
+            )
+        ).scalars().all()
+        return [_to_user(row) for row in rows], total
+
+    async def count_active_admins(self) -> int:
+        stmt = select(func.count(UserORM.id)).where(
+            UserORM.is_admin.is_(True),
+            UserORM.is_active.is_(True),
+        )
+        return int((await self._session.execute(stmt)).scalar_one())
+
+    async def count_active_admins_for_update(self) -> int:
+        """锁定全部启用管理员并返回数量，供最后管理员事务保护使用。"""
+        stmt = (
+            select(UserORM.id)
+            .where(
+                UserORM.is_admin.is_(True),
+                UserORM.is_active.is_(True),
+            )
+            .with_for_update()
+        )
+        rows = (await self._session.execute(stmt)).scalars().all()
+        return len(rows)
+
+    async def set_admin(
+        self, user_id: int, *, is_admin: bool, commit: bool = True
+    ) -> User:
+        orm = await self._session.get(UserORM, user_id, with_for_update=True)
+        if orm is None:
+            raise ValueError(f"用户 {user_id} 不存在")
+        orm.is_admin = is_admin
+        if commit:
+            await self._session.commit()
+        else:
+            await self._session.flush()
+        await self._session.refresh(orm)
+        return _to_user(orm)
+
+    async def set_active(
+        self, user_id: int, *, is_active: bool, commit: bool = True
+    ) -> User:
+        orm = await self._session.get(UserORM, user_id, with_for_update=True)
+        if orm is None:
+            raise ValueError(f"用户 {user_id} 不存在")
+        orm.is_active = is_active
+        if commit:
+            await self._session.commit()
+        else:
+            await self._session.flush()
+        await self._session.refresh(orm)
+        return _to_user(orm)

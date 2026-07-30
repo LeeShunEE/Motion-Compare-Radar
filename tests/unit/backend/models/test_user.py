@@ -1,10 +1,11 @@
 """User 模型单元测试。"""
 
-import pytest
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 
-from app.models.user import User, UserCredentials, OAuthAccount
+import pytest
 from pydantic import SecretStr
+
+from app.models.user import OAuthAccount, User, UserCredentials
 
 
 class TestUserModel:
@@ -126,6 +127,19 @@ class TestUserModel:
             created_at=datetime(2026, 1, 1, tzinfo=UTC),
         )
         assert user.is_verified is False
+
+    def test_account_permissions_have_safe_defaults(self) -> None:
+        """新用户默认启用且不是管理员，避免意外提权或不可登录。"""
+        user = User(
+            id=1,
+            username="alice",
+            email="alice@example.com",
+            created_at=datetime(2026, 1, 1, tzinfo=UTC),
+        )
+
+        assert user.is_active is True
+        assert user.is_admin is False
+        assert user.last_login_at is None
 
 
 class TestUserCredentialsModel:

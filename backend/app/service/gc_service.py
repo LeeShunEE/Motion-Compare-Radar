@@ -12,12 +12,13 @@
 import asyncio
 import logging
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
+from app.dao.audit_event_dao import AuditEventDAO
 from app.dao.render_task_dao import RenderTaskDAO
 from app.dao.user_dao import UserDAO
 from app.service.file_service import FileService
@@ -82,12 +83,24 @@ class OutputGCService:
         # 2. 配额维度：检查全局 outputs 大小，超配额时删除最老文件
         quota_deleted = await self._cleanup_by_global_quota()
 
+        # 3. 审计事件使用独立的长期留存窗口。
+        audit_deleted = await self._cleanup_expired_audit_events()
+
         total_deleted = len(time_deleted) + len(quota_deleted)
         logger.info(
             f"GC 周期完成：时间维度删除 {len(time_deleted)} 个，"
             f"配额维度删除 {len(quota_deleted)} 个，"
             f"共 {total_deleted} 个产物文件"
+            f"，审计事件删除 {audit_deleted} 条"
         )
+
+    async def _cleanup_expired_audit_events(self) -> int:
+        """删除超过审计留存窗口的事件。"""
+        cutoff = datetime.now(tz=UTC) - timedelta(
+            days=self._config.audit_retention_days
+        )
+        async with self._session_factory() as session:
+            return await AuditEventDAO(session).delete_before(cutoff)
 
     async def _cleanup_expired_by_time(self) -> list[int]:
         """时间维度清理：删除所有用户的过期产物。

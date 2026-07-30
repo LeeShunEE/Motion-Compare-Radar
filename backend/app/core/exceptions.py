@@ -30,6 +30,25 @@ class PermissionDeniedError(BusinessError):
     code = "permission_denied"
 
 
+class AccountDisabledError(PermissionDeniedError):
+    """账号已被管理员停用。"""
+
+    code = "account_disabled"
+
+
+class AdminRequiredError(PermissionDeniedError):
+    """当前账号缺少管理员权限。"""
+
+    code = "admin_required"
+
+
+class AdminSafetyError(BusinessError):
+    """会导致管理员锁死或违反自我保护规则的操作。"""
+
+    status_code = 409
+    code = "admin_safety_conflict"
+
+
 class UserExistsError(BusinessError):
     """用户名/邮箱已存在。"""
 
@@ -51,6 +70,13 @@ class InvalidFileError(BusinessError):
     code = "invalid_file"
 
 
+class PublicAssetConflictError(BusinessError):
+    """同名公共资源存在且未显式允许覆盖。"""
+
+    status_code = 409
+    code = "asset_conflict"
+
+
 class StoredFileNotFoundError(BusinessError):
     """用户存储中不存在该文件。"""
 
@@ -70,6 +96,13 @@ class TaskNotFoundError(BusinessError):
 
     status_code = 404
     code = "task_not_found"
+
+
+class RenderOperationConflictError(BusinessError):
+    """当前任务状态不允许管理员执行该渲染操作。"""
+
+    status_code = 409
+    code = "render_operation_conflict"
 
 
 class RenderFailedError(BusinessError):

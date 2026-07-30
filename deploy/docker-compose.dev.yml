@@ -29,7 +29,7 @@ services:
       target: development
       args:
         # 国内本地开发走中国镜像（生产/Coolify 不传 → 官方源）
-        PIP_INDEX: https://mirrors.aliyun.com/pypi/simple/
+        PIP_INDEX: ${PIP_INDEX-https://mirrors.aliyun.com/pypi/simple/}
     environment:
       # Use SQLite for development (uncomment to use PostgreSQL)
       DATABASE_URL: sqlite+aiosqlite:///./storage/dev.db
@@ -52,6 +52,7 @@ services:
       RENDER_TIMEOUT_SECONDS: 600
       # 进度回调共享密钥（与 render-worker 的 RENDER_CALLBACK_TOKEN 同值）
       RENDER_CALLBACK_TOKEN_SECRET_STRING: dev-only-render-callback-token
+      INITIAL_ADMIN_EMAIL: ${INITIAL_ADMIN_EMAIL:-dev@test.com}
     ports:
       - "18000:8000"
     volumes:
@@ -59,9 +60,7 @@ services:
       - ../backend/app:/app/app:ro
       - ../backend/alembic:/app/alembic:ro
       - backend_storage:/app/storage
-      # Public assets: frontend/public mounted for backend to list music/silhouette files
-      # Must be writable for Docker to create _render_tmp mountpoint
-      - ../frontend/public:/app/public_assets
+      - public_assets:/app/public_assets
       # Render tmp: writable subdir for silhouette rewrite (worker reads via staticFile)
       - render_tmp:/app/public_assets/_render_tmp
     # Create storage directory and run migrations before starting
@@ -79,12 +78,13 @@ services:
         NPM_REGISTRY: https://registry.npmmirror.com
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:18000
+      ADMIN_PATH_SECRET_STRING: ${ADMIN_PATH_SECRET_STRING:-radar-dev-operations-console}
     ports:
       - "13000:3000"
     volumes:
       # Mount source code for hot reload
       - ../frontend/src:/app/src:ro
-      - ../frontend/public:/app/public:ro
+      - public_assets:/app/public:ro
       - ../frontend/package.json:/app/package.json:ro
     healthcheck:
       # next dev 首次按需编译 /api/health 较慢（首屏常冲到 700MB-1.2GB），
@@ -119,9 +119,7 @@ services:
     volumes:
       # Mount source code for hot reload
       - ../frontend/src/remotion:/app/src/remotion:ro
-      # Worker public must be writable for Docker to create _render_tmp mountpoint
-      # (render_tmp volume mounts under /app/public/_render_tmp)
-      - ../frontend/public:/app/public
+      - public_assets:/app/public:ro
       - ../frontend/render-worker:/app/render-worker:ro
       - render_outputs:/app/output
       - backend_storage:/app/storage  # 共享 backend storage，让产物写入后可被 backend 读取

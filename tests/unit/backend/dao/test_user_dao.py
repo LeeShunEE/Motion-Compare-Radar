@@ -1,13 +1,14 @@
 """UserDAO 单元测试。"""
 
-import pytest
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 
-from app.dao.user_dao import UserDAO, _to_user
-from app.dao.orm import UserORM
-from app.models.user import User, UserCredentials
+import pytest
 from pydantic import SecretStr
+
+from app.dao.orm import UserORM
+from app.dao.user_dao import UserDAO, _to_user
+from app.models.user import User, UserCredentials
 
 
 @pytest.fixture
@@ -32,7 +33,10 @@ class TestToUser:
         orm.username = "alice"
         orm.email = "alice@example.com"
         orm.is_verified = True
+        orm.is_admin = True
+        orm.is_active = False
         orm.display_name = "Alice"
+        orm.last_login_at = datetime(2026, 2, 1, tzinfo=UTC)
         orm.created_at = datetime(2026, 1, 1, tzinfo=UTC)
 
         user = _to_user(orm)
@@ -40,7 +44,10 @@ class TestToUser:
         assert user.username == "alice"
         assert user.email == "alice@example.com"
         assert user.is_verified is True
+        assert user.is_admin is True
+        assert user.is_active is False
         assert user.display_name == "Alice"
+        assert user.last_login_at == datetime(2026, 2, 1, tzinfo=UTC)
         assert user.created_at == datetime(2026, 1, 1, tzinfo=UTC)
 
     def test_converts_orm_without_username(self) -> None:
@@ -386,3 +393,76 @@ class TestListAllIds:
 
         ids = await dao.list_all_ids()
         assert ids == []
+
+
+class TestRecordSuccessfulLogin:
+    async def test_promotes_matching_user_when_no_admin_exists(
+        self, dao: UserDAO, mock_session: AsyncMock
+    ) -> None:
+        """仅首位匹配引导邮箱的登录用户获得管理员权限。"""
+        orm = MagicMock(spec=UserORM)
+        orm.id = 1
+        orm.username = "alice"
+        orm.email = "alice@example.com"
+        orm.is_verified = True
+        orm.is_admin = False
+        orm.is_active = True
+        orm.display_name = None
+        orm.last_login_at = None
+        orm.created_at = datetime(2026, 1, 1, tzinfo=UTC)
+        mock_session.get.return_value = orm
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = None
+        mock_session.execute.return_value = result
+
+        user = await dao.record_successful_login(
+            1, initial_admin_email="Alice@Example.com"
+        )
+
+        assert user.is_admin is True
+        assert user.last_login_at is not None
+        mock_session.commit.assert_awaited_once()
+
+    async def test_does_not_promote_when_an_admin_exists(
+        self, dao: UserDAO, mock_session: AsyncMock
+    ) -> None:
+        orm = MagicMock(spec=UserORM)
+        orm.id = 2
+        orm.username = "bob"
+        orm.email = "bob@example.com"
+        orm.is_verified = True
+        orm.is_admin = False
+        orm.is_active = True
+        orm.display_name = None
+        orm.last_login_at = None
+        orm.created_at = datetime(2026, 1, 1, tzinfo=UTC)
+        mock_session.get.return_value = orm
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = 1
+        mock_session.execute.return_value = result
+
+        user = await dao.record_successful_login(
+            2, initial_admin_email="bob@example.com"
+        )
+
+        assert user.is_admin is False
+
+
+class TestCountActiveAdminsForUpdate:
+    async def test_locks_active_admin_rows_before_counting(
+        self, dao: UserDAO, mock_session: AsyncMock
+    ) -> None:
+        result = MagicMock()
+        scalars = MagicMock()
+        scalars.all.return_value = [1, 2]
+        result.scalars.return_value = scalars
+
+        async def execute(statement):
+            assert statement._for_update_arg is not None
+            return result
+
+        mock_session.execute = AsyncMock(side_effect=execute)
+
+        count = await dao.count_active_admins_for_update()
+
+        assert count == 2

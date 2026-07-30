@@ -1,9 +1,10 @@
 """RenderTask 模型单元测试。"""
 
-import pytest
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 
-from app.models.render_task import RenderTask, RenderMode, RenderStatus, Codec
+import pytest
+
+from app.models.render_task import Codec, RenderMode, RenderStatus, RenderTask
 
 
 class TestRenderModeEnum:

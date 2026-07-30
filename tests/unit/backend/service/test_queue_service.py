@@ -6,10 +6,13 @@
 
 import asyncio
 from contextlib import asynccontextmanager
-from unittest.mock import AsyncMock, patch
+from datetime import UTC, datetime
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from app.core.exceptions import RenderFailedError
+from app.models.render_task import Codec, RenderMode, RenderStatus, RenderTask
 from app.service.queue_service import RenderQueue
 
 
@@ -30,12 +33,21 @@ class TestEnqueueAndCancel:
         assert 10 in q._pending
         assert q.queue_size() == 1
 
-    def test_cancel_removes_from_pending(self):
+    async def test_cancel_removes_from_pending_without_notifying_worker(self):
         q = _make_queue()
         q.enqueue(10)
-        q.cancel(10)
+        await q.cancel(10)
         assert 10 not in q._pending
         assert 10 in q._canceled
+        q._worker.cancel.assert_not_awaited()
+
+    async def test_cancel_notifies_worker_for_running_task(self):
+        q = _make_queue()
+        q._running[10] = 0.0
+
+        await q.cancel(10)
+
+        q._worker.cancel.assert_awaited_once_with(10)
 
     def test_forget_removes_everywhere(self):
         q = _make_queue()
@@ -76,6 +88,23 @@ class TestPosition:
     def test_position_unknown_returns_zero(self):
         q = _make_queue()
         assert q.position(999) == 0
+
+
+class TestAdminSnapshot:
+    def test_snapshot_contains_running_progress_pending_position_and_capacity(self):
+        q = _make_queue(concurrency=2)
+        q._running[10] = __import__("time").monotonic()
+        q._progress[10] = (24, 100)
+        q.enqueue(20)
+        q.record_render_speed(60, 1000)
+
+        snapshot = q.admin_snapshot()
+
+        assert snapshot.concurrency == 2
+        assert snapshot.queue_size == 2
+        assert snapshot.avg_fps == 60
+        assert snapshot.tasks[0].rendered_frames == 24
+        assert snapshot.tasks[1].position == 1
 
 
 class TestEta:
@@ -203,3 +232,94 @@ class TestProgress:
 
         assert 10 not in q._running
         assert q.progress(10) is None
+
+    async def test_process_one_stops_when_queued_to_running_transition_loses_race(self):
+        q = _make_queue()
+
+        @asynccontextmanager
+        async def _factory():
+            yield AsyncMock()
+
+        q._session_factory = _factory
+        dao = AsyncMock()
+        dao.get.return_value = RenderTask(
+            id=10,
+            user_id=2,
+            mode=RenderMode.SINGLE,
+            codec=Codec.H264,
+            status=RenderStatus.QUEUED,
+            input_props={},
+            output_path="/tmp/10.mp4",
+            created_at=datetime(2026, 1, 1, tzinfo=UTC),
+        )
+        dao.mark_running_if_queued.return_value = False
+
+        with patch("app.service.queue_service.RenderTaskDAO", return_value=dao):
+            await q._process_one(10)
+
+        q._worker.render.assert_not_awaited()
+        assert 10 not in q._running
+
+    async def test_worker_cancellation_keeps_task_canceled(self):
+        q = _make_queue()
+
+        @asynccontextmanager
+        async def _factory():
+            yield AsyncMock()
+
+        q._session_factory = _factory
+        task = RenderTask(
+            id=10,
+            user_id=2,
+            mode=RenderMode.SINGLE,
+            codec=Codec.H264,
+            status=RenderStatus.RUNNING,
+            input_props={},
+            output_path="/tmp/10.mp4",
+            created_at=datetime(2026, 1, 1, tzinfo=UTC),
+        )
+        dao = AsyncMock()
+        dao.get.return_value = task
+
+        async def canceled_render(request):
+            q._canceled.add(10)
+            raise RenderFailedError("renderMedia() got cancelled")
+
+        q._worker.render.side_effect = canceled_render
+        with patch("app.service.queue_service.RenderTaskDAO", return_value=dao):
+            await q._process_one(10)
+
+        dao.mark_canceled.assert_awaited_once_with(10)
+        dao.mark_failed.assert_not_awaited()
+
+    async def test_terminal_write_uses_running_state_guard(self):
+        q = _make_queue()
+
+        @asynccontextmanager
+        async def _factory():
+            yield AsyncMock()
+
+        q._session_factory = _factory
+        task = RenderTask(
+            id=10,
+            user_id=2,
+            mode=RenderMode.SINGLE,
+            codec=Codec.H264,
+            status=RenderStatus.RUNNING,
+            input_props={},
+            output_path="/tmp/10.mp4",
+            created_at=datetime(2026, 1, 1, tzinfo=UTC),
+        )
+        dao = AsyncMock()
+        dao.get.return_value = task
+        q._worker.render.return_value = MagicMock(
+            total_frames=60,
+            duration_ms=1000,
+            output_path="/tmp/10.mp4",
+        )
+
+        with patch("app.service.queue_service.RenderTaskDAO", return_value=dao):
+            await q._process_one(10)
+
+        dao.mark_done_if_running.assert_awaited_once_with(10, "/tmp/10.mp4", 1000)
+        dao.mark_done.assert_not_awaited()

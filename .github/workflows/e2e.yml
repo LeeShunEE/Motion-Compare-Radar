@@ -23,31 +23,37 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # 注入公共素材 seed（testenv 配置由测试系统提供，见 CLAUDE.md §3.3.1）。
-      # 真实 *.flac/*.png 素材被 .gitignore 排除（媒体体积大），CI checkout 后
-      # frontend/public/{music,silhouettes} 仅剩 .gitkeep，导致后端列举为空、
-      # 前端「公共资源」区块（AssetSelector 仅在 length>0 时渲染）不出现，
-      # file-and-asset-management.spec.ts 的「公共素材」用例必失败。
-      # 此处生成占位素材：后端 assets_router 仅按扩展名 + stat 列举（不校验内容），
-      # 前端仅列出文件名，占位文件足以驱动该列举旅程。
-      # 必须在 docker compose up 之前生成——bind mount 实时反映宿主机内容。
-      - name: Seed public assets (testenv)
-        run: |
-          mkdir -p frontend/public/music
-          printf 'fLaC' > "frontend/public/music/sample-bgm.flac"
-          head -c 4096 /dev/zero >> "frontend/public/music/sample-bgm.flac"
-
       # 启动 testenv stack (backend + frontend + render-worker + db)
       - name: Start testenv stack
         run: |
           cd deploy
-          docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.e2e.yml up -d
         env:
           # docker-compose.yml 要求必填的环境变量
           # dev override 使用 SQLite，但这些变量仍需设置以通过 docker compose 解析阶段
           POSTGRES_PASSWORD: devpass
           JWT_SECRET_STRING: ci-test-secret-not-for-production
+          ADMIN_PATH_SECRET_STRING: radar-ci-operations-console
+          RENDER_CALLBACK_TOKEN: ci-render-callback-token-not-for-production
+          INITIAL_ADMIN_EMAIL: dev@test.com
+          E2E_RESOURCE_PREFIX: radar-e2e-${{ github.run_id }}
           # CI runner 在欧洲/美国，访问阿里云镜像超时；覆盖为空走官方 PyPI
+          PIP_INDEX: ''
+
+      # Seed belongs to the test system and is written into the runtime volume,
+      # never copied from the ignored frontend/public tree.
+      - name: Seed public assets (testenv)
+        run: |
+          cd deploy
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.e2e.yml exec -T backend sh -c \
+            'mkdir -p /app/public_assets/music && printf "fLaC" > /app/public_assets/music/sample-bgm.flac'
+        env:
+          POSTGRES_PASSWORD: devpass
+          JWT_SECRET_STRING: ci-test-secret-not-for-production
+          ADMIN_PATH_SECRET_STRING: radar-ci-operations-console
+          RENDER_CALLBACK_TOKEN: ci-render-callback-token-not-for-production
+          INITIAL_ADMIN_EMAIL: dev@test.com
+          E2E_RESOURCE_PREFIX: radar-e2e-${{ github.run_id }}
           PIP_INDEX: ''
 
       # 安装 pnpm
@@ -89,11 +95,15 @@ jobs:
           done
           echo "::error::服务在 150 秒后仍未就绪"
           # 输出日志便于排查
-          docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.dev.yml logs --tail=50
+          docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.dev.yml -f deploy/docker-compose.e2e.yml logs --tail=50
           exit 1
         env:
           POSTGRES_PASSWORD: devpass
           JWT_SECRET_STRING: ci-test-secret-not-for-production
+          ADMIN_PATH_SECRET_STRING: radar-ci-operations-console
+          RENDER_CALLBACK_TOKEN: ci-render-callback-token-not-for-production
+          INITIAL_ADMIN_EMAIL: dev@test.com
+          E2E_RESOURCE_PREFIX: radar-e2e-${{ github.run_id }}
           PIP_INDEX: ''
 
       # 运行 Playwright e2e 测试
@@ -105,6 +115,9 @@ jobs:
         env:
           PLAYWRIGHT_BASE_URL: http://localhost:13000
           PLAYWRIGHT_API_URL: http://localhost:18000        # 后端地址，供 auth-helpers 取码
+          PLAYWRIGHT_ADMIN_PATH: radar-ci-operations-console
+          PLAYWRIGHT_ADMIN_USERNAME: dev
+          PLAYWRIGHT_ADMIN_PASSWORD: dev12345
           # 让 Node.js 从 frontend/node_modules 解析模块（测试文件在 tests 目录下）
           NODE_PATH: ${{ github.workspace }}/frontend/node_modules
 
@@ -120,8 +133,12 @@ jobs:
       # 清理 Docker 资源
       - name: Stop testenv stack
         if: always()
-        run: cd deploy && docker compose -f docker-compose.yml -f docker-compose.dev.yml down -v
+        run: cd deploy && docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.e2e.yml down -v
         env:
           POSTGRES_PASSWORD: devpass
           JWT_SECRET_STRING: ci-test-secret-not-for-production
+          ADMIN_PATH_SECRET_STRING: radar-ci-operations-console
+          RENDER_CALLBACK_TOKEN: ci-render-callback-token-not-for-production
+          INITIAL_ADMIN_EMAIL: dev@test.com
+          E2E_RESOURCE_PREFIX: radar-e2e-${{ github.run_id }}
           PIP_INDEX: ''

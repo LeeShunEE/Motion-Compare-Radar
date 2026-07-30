@@ -11,7 +11,10 @@ export interface User {
   username: string | null;
   email: string;
   isVerified: boolean;
+  isAdmin: boolean;
+  isActive: boolean;
   displayName: string | null;
+  lastLoginAt: string | null;
   createdAt: string;
 }
 
@@ -66,7 +69,10 @@ export async function initializeAuth(): Promise<void> {
         username: user.username,
         email: user.email,
         isVerified: user.is_verified,
+        isAdmin: user.is_admin,
+        isActive: user.is_active,
         displayName: user.display_name,
+        lastLoginAt: user.last_login_at,
         createdAt: user.created_at,
       },
       accessToken: storedAccess,
@@ -96,7 +102,10 @@ export async function login(identifier: string, password: string): Promise<void>
         username: user.username,
         email: user.email,
         isVerified: user.is_verified,
+        isAdmin: user.is_admin,
+        isActive: user.is_active,
         displayName: user.display_name,
+        lastLoginAt: user.last_login_at,
         createdAt: user.created_at,
       },
       accessToken: tokens.access_token,
@@ -131,7 +140,10 @@ export async function registerWithCode(email: string, code: string): Promise<boo
         username: user.username,
         email: user.email,
         isVerified: user.is_verified,
+        isAdmin: user.is_admin,
+        isActive: user.is_active,
         displayName: user.display_name,
+        lastLoginAt: user.last_login_at,
         createdAt: user.created_at,
       },
       accessToken: tokens.access_token,
@@ -175,7 +187,10 @@ export async function handleOAuthCallback(
         username: user.username,
         email: user.email,
         isVerified: user.is_verified,
+        isAdmin: user.is_admin,
+        isActive: user.is_active,
         displayName: user.display_name,
+        lastLoginAt: user.last_login_at,
         createdAt: user.created_at,
       },
       accessToken: tokens.access_token,
@@ -252,7 +267,10 @@ export async function register(username: string, email: string, password: string
         username: user.username,
         email: user.email,
         isVerified: false,
+        isAdmin: false,
+        isActive: true,
         displayName: null,
+        lastLoginAt: null,
         createdAt: user.created_at,
       },
       accessToken: tokens.access_token,
@@ -286,7 +304,10 @@ export async function resetPassword(
         username: user.username,
         email: user.email,
         isVerified: user.is_verified,
+        isAdmin: user.is_admin,
+        isActive: user.is_active,
         displayName: user.display_name,
+        lastLoginAt: user.last_login_at,
         createdAt: user.created_at,
       },
       accessToken: tokens.access_token,
