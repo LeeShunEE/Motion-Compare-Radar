@@ -1,9 +1,9 @@
 """email_service 单元测试（mock resend SDK，覆盖发码/欢迎/失败分支）。
 
-不发起真实 HTTP：resend.Emails.send 被替换为内存 mock（§4 进程内允许）。
+不发起真实 HTTP：resend.Emails.send_async 被替换为内存 mock（§4 进程内允许）。
 """
 
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 import resend
@@ -15,10 +15,10 @@ from app.service.email_service import EmailService
 
 
 @pytest.fixture
-def mock_send(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
-    """替换 resend.Emails.send 为内存 mock。"""
-    send = MagicMock()
-    monkeypatch.setattr(resend.Emails, "send", send)
+def mock_send(monkeypatch: pytest.MonkeyPatch) -> AsyncMock:
+    """替换 resend.Emails.send_async 为内存 mock（生产路径必须走 async，避免堵事件循环）。"""
+    send = AsyncMock()
+    monkeypatch.setattr(resend.Emails, "send_async", send)
     return send
 
 
@@ -48,7 +48,7 @@ class TestInit:
 class TestSendVerificationCode:
     async def test_send_register(self, with_api_key, mock_send):
         await EmailService().send_verification_code("a@b.com", "123456", "register")
-        mock_send.assert_called_once()
+        mock_send.assert_awaited_once()
         payload = mock_send.call_args.args[0]
         assert payload["to"] == "a@b.com"
         assert payload["subject"] == "Radar-Renderer 邮箱验证码"
@@ -76,18 +76,32 @@ class TestSendVerificationCode:
     async def test_unknown_purpose_raises(self, with_api_key, mock_send):
         with pytest.raises(EmailServiceError):
             await EmailService().send_verification_code("a@b.com", "1", "weird")
-        mock_send.assert_not_called()
+        mock_send.assert_not_awaited()
 
     async def test_send_failure_raises(self, with_api_key, mock_send):
         mock_send.side_effect = RuntimeError("network down")
         with pytest.raises(EmailServiceError):
             await EmailService().send_verification_code("a@b.com", "1", "register")
 
+    async def test_uses_send_async_not_sync_send(
+        self, with_api_key, mock_send, monkeypatch
+    ):
+        """回归：禁止再走同步 Emails.send，否则会堵死单 worker 事件循环。"""
+        from unittest.mock import MagicMock
+
+        blocked = MagicMock(
+            side_effect=AssertionError("sync Emails.send must not be used")
+        )
+        monkeypatch.setattr(resend.Emails, "send", blocked)
+        await EmailService().send_verification_code("a@b.com", "123456", "register")
+        mock_send.assert_awaited_once()
+        blocked.assert_not_called()
+
 
 class TestSendOauthWelcome:
     async def test_send_welcome(self, with_api_key, mock_send):
         await EmailService().send_oauth_welcome("a@b.com", "google")
-        mock_send.assert_called_once()
+        mock_send.assert_awaited_once()
         payload = mock_send.call_args.args[0]
         assert "google" in payload["subject"]
         assert payload["from"] == with_api_key
