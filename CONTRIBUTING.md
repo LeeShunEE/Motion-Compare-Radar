@@ -151,6 +151,7 @@ This project follows [Semantic Versioning](https://semver.org/).
 `main`.** Branch protection and CI (including the lockfile drift guard) only run
 on PRs. Direct pushes to `main` bypass those checks and have already caused
 release failures (e.g. bumping `pyproject.toml` without regenerating `uv.lock`).
+Do not use admin bypass / rule-violation overrides for release work.
 
 **After the release PR merges, do not tag manually.** The `Release` workflow
 (`.github/workflows/release.yml`) waits for the **CI workflow on `main`** to
@@ -321,7 +322,7 @@ cd frontend && pnpm test:unit && pnpm test:integration
 
 **版本 bump 必须走 PR，禁止直接往 `main` 推发版 commit。** 分支保护与 CI
 （含 lockfile 漂移守卫）只在 PR 上完整生效；直推 `main` 曾导致漏跑 `uv lock`
-等发版事故。
+等发版事故。发版时**不得**使用管理员 bypass / 规则豁免。
 
 **发版 PR 合并后不必手动打 tag。** `Release` workflow
 （`.github/workflows/release.yml`）会等待 **`main` 上的 CI** 成功结束后：

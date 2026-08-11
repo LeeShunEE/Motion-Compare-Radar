@@ -64,9 +64,11 @@ gh issue create --repo LeeShunEE/Radar-Renderer \
 
 ## 7. Releases / 发版
 
-Routine releases: open a version-bump PR (see root `CONTRIBUTING.md` §10). After
-merge, **CI on `main` must succeed**; then `.github/workflows/release.yml`
-creates the GitHub Release and `deploy.yml` triggers Coolify.
+Routine releases: open a version-bump PR (see root `CONTRIBUTING.md` §10) —
+**version bumps must go through a PR, never pushed straight to `main` / 版本
+bump 必须走 PR，禁止直推 `main`**. After merge, **CI on `main` must succeed**;
+then `.github/workflows/release.yml` creates the GitHub Release and `deploy.yml`
+triggers Coolify.
 
 First-time / backfill when no Release exists yet:
 
