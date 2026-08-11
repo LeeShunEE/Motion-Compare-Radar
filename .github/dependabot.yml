@@ -32,6 +32,18 @@ updates:
     groups:
       frontend:
         patterns: ["*"]
+    # 以下 major 升级曾破坏 CI，待上游适配 / 人工评估后再放开：
+    # - typescript 7.0：typescript-eslint 8.x 与 remotion bundler 均未适配
+    # - jsdom 30：拉入 undici 8，与项目 undici 7 的 webidl 冲突
+    # - next 17+：Next 大版本升级风险高
+    # patch/minor 升级不受影响，继续自动提
+    ignore:
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "jsdom"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "next"
+        update-types: ["version-update:semver-major"]
 
   # GitHub Actions 自身
   - package-ecosystem: github-actions
