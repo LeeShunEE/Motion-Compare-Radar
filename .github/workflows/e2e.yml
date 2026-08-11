@@ -121,6 +121,27 @@ jobs:
           # 让 Node.js 从 frontend/node_modules 解析模块（测试文件在 tests 目录下）
           NODE_PATH: ${{ github.workspace }}/frontend/node_modules
 
+      # 测试失败时 dump render-worker / backend 容器日志，便于诊断渲染崩溃。
+      # 背景：Wait for services 通过后既有的 logs dump 分支不再触发，导致渲染类
+      # e2e 失败时只能看到"下载超时"，看不到 worker 真实报错（SIGSEGV/OOM/option
+      # 校验等）。worker 被强杀时 docker logs 仍会留下进程退出信号与 stderr。
+      - name: Dump service logs on failure
+        if: failure()
+        run: |
+          cd deploy
+          echo "===== render-worker logs (tail 500) ====="
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.e2e.yml logs --tail=500 --no-color render-worker || true
+          echo "===== backend logs (tail 200) ====="
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.e2e.yml logs --tail=200 --no-color backend || true
+        env:
+          POSTGRES_PASSWORD: devpass
+          JWT_SECRET_STRING: ci-test-secret-not-for-production
+          ADMIN_PATH_SECRET_STRING: radar-ci-operations-console
+          RENDER_CALLBACK_TOKEN: ci-render-callback-token-not-for-production
+          INITIAL_ADMIN_EMAIL: dev@test.com
+          E2E_RESOURCE_PREFIX: radar-e2e-${{ github.run_id }}
+          PIP_INDEX: ''
+
       # 上传测试结果（失败时保留报告）
       - name: Upload test artifacts
         if: always()
