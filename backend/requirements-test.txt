@@ -2,13 +2,13 @@
 #    uv export --no-hashes --no-emit-project --extra test --extra dev --format requirements-txt -o requirements-test.txt
 aiosqlite==0.22.1
     # via radar-chart-backend
-alembic==1.18.4
+alembic==1.19.0
     # via radar-chart-backend
-annotated-doc==0.0.4
+annotated-doc==0.0.5
     # via fastapi
-annotated-types==0.7.0
+annotated-types==0.8.0
     # via pydantic
-anyio==4.14.0
+anyio==4.14.2
     # via
     #   httpx
     #   starlette
@@ -17,33 +17,33 @@ argon2-cffi==25.1.0
     # via radar-chart-backend
 argon2-cffi-bindings==25.1.0
     # via argon2-cffi
-ast-serialize==0.5.0
+ast-serialize==0.8.0
     # via mypy
 asyncpg==0.31.0
     # via radar-chart-backend
 authlib==1.7.2
     # via radar-chart-backend
-certifi==2026.6.17
+certifi==2026.7.22
     # via
     #   httpcore
     #   httpx
     #   requests
-cffi==2.0.0
+cffi==2.1.1
     # via
     #   argon2-cffi-bindings
     #   cryptography
-charset-normalizer==3.4.7
+charset-normalizer==3.4.9
     # via requests
-click==8.4.1
+click==8.4.2
     # via uvicorn
 colorama==0.4.6 ; sys_platform == 'win32'
     # via
     #   click
     #   pytest
     #   uvicorn
-coverage==7.14.1
+coverage==7.15.4
     # via pytest-cov
-cryptography==49.0.0
+cryptography==50.0.0
     # via
     #   authlib
     #   joserfc
@@ -51,9 +51,9 @@ dnspython==2.8.0
     # via email-validator
 email-validator==2.3.0
     # via pydantic
-fastapi==0.137.2
+fastapi==0.141.1
     # via radar-chart-backend
-greenlet==3.5.2 ; platform_machine == 'AMD64' or platform_machine == 'WIN32' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'ppc64le' or platform_machine == 'win32' or platform_machine == 'x86_64'
+greenlet==3.5.4 ; platform_machine == 'AMD64' or platform_machine == 'WIN32' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'ppc64le' or platform_machine == 'win32' or platform_machine == 'x86_64'
     # via sqlalchemy
 h11==0.16.0
     # via
@@ -73,19 +73,19 @@ idna==3.18
     #   requests
 iniconfig==2.3.0
     # via pytest
-joserfc==1.7.1
+joserfc==1.7.4
     # via authlib
-librt==0.11.0 ; platform_python_implementation != 'PyPy'
+librt==0.15.0 ; platform_python_implementation != 'PyPy'
     # via mypy
-mako==1.3.12
+mako==1.4.1
     # via alembic
 markupsafe==3.0.3
     # via mako
-mypy==2.1.0
+mypy==2.3.0
     # via radar-chart-backend
 mypy-extensions==1.1.0
     # via mypy
-packaging==26.2
+packaging==26.3
     # via pytest
 pathspec==1.1.1
     # via mypy
@@ -100,15 +100,15 @@ pydantic==2.13.4
     #   fastapi
     #   pydantic-settings
     #   radar-chart-backend
-pydantic-core==2.46.4
+pydantic-core==2.48.0
     # via pydantic
-pydantic-settings==2.14.1
+pydantic-settings==2.15.0
     # via radar-chart-backend
 pygments==2.20.0
     # via pytest
 pyjwt==2.13.0
     # via radar-chart-backend
-pytest==9.1.0
+pytest==9.1.1
     # via
     #   pytest-asyncio
     #   pytest-cov
@@ -130,19 +130,19 @@ pyyaml==6.0.3
     # via uvicorn
 requests==2.34.2
     # via resend
-resend==2.32.2
+resend==2.35.0
     # via radar-chart-backend
-ruff==0.15.17
+ruff==0.16.2
     # via radar-chart-backend
 sqlalchemy==2.0.51
     # via
     #   alembic
     #   radar-chart-backend
-starlette==1.3.1
+starlette==1.5.0
     # via fastapi
 tomli==2.4.1 ; python_full_version <= '3.11'
     # via coverage
-typing-extensions==4.15.0
+typing-extensions==4.16.0
     # via
     #   alembic
     #   anyio
@@ -162,11 +162,11 @@ typing-inspection==0.4.2
     #   pydantic-settings
 urllib3==2.7.0
     # via requests
-uvicorn==0.49.0
+uvicorn==0.52.1
     # via radar-chart-backend
 uvloop==0.22.1 ; platform_python_implementation != 'PyPy' and sys_platform != 'cygwin' and sys_platform != 'win32'
     # via uvicorn
 watchfiles==1.2.0
     # via uvicorn
-websockets==16.0
+websockets==17.0.1
     # via uvicorn
