@@ -62,18 +62,20 @@ gh issue create --repo LeeShunEE/Radar-Renderer \
 - [ ] Enable **Dependabot alerts** and **Dependabot security updates**
       (the `.github/dependabot.yml` handles version-update PRs).
 
-## 7. First release / 首个发布
+## 7. Releases / 发版
 
-When the backend MVP and docs land, follow [`CONTRIBUTING.md`](../../CONTRIBUTING.md)
-§10 end-to-end. **Version bumps must go through a PR** (never push release commits
-straight to `main` / 版本 bump 必须走 PR，禁止直推 `main`); tag and
-`gh release create` only after the PR is merged and CI has passed on that path.
+Routine releases: open a version-bump PR (see root `CONTRIBUTING.md` §10) —
+**version bumps must go through a PR, never pushed straight to `main` / 版本
+bump 必须走 PR，禁止直推 `main`**. After merge, **CI on `main` must succeed**;
+then `.github/workflows/release.yml` creates the GitHub Release and `deploy.yml`
+triggers Coolify.
+
+First-time / backfill when no Release exists yet:
 
 ```bash
-# After the release PR is merged into main:
+# Prefer: Actions → Release → Run workflow (version optional)
+# Or manual:
 git tag -a v0.1.0 -m "v0.1.0"
 git push origin v0.1.0
-python scripts/gen-release-notes.py > pr-list.md
-# Summarize pr-list.md with LLM → release-notes.md
-gh release create v0.1.0 --notes-file release-notes.md --title "v0.1.0"
+gh release create v0.1.0 --generate-notes --title "v0.1.0"
 ```

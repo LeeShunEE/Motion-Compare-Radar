@@ -3,11 +3,14 @@
 发送验证码邮件等。
 """
 
+import logging
+
 import resend
-from pydantic import SecretStr
 
 from app.core.config import settings
 from app.core.exceptions import EmailServiceError
+
+logger = logging.getLogger(__name__)
 
 
 class EmailService:
@@ -48,9 +51,10 @@ class EmailService:
             raise EmailServiceError(f"未知的验证码用途：{purpose}")
 
         try:
-            # Resend SDK 是同步的，但我们在 async 方法中调用
-            # 在生产环境中可以考虑使用 asyncio.to_thread 包装
-            resend.Emails.send(
+            # 必须用 async API：同步 resend.Emails.send 会阻塞 uvicorn 单 worker
+            # 事件循环，期间 /health 与全部请求挂死，反向代理表现为 503，
+            # Docker healthcheck 失败后整容器重启（邮件可能已成功投递）。
+            await resend.Emails.send_async(
                 {
                     "from": self._from_email,
                     "to": email,
@@ -72,7 +76,7 @@ class EmailService:
         body = f"您已成功通过 {provider} 账户登录雷达图动画生成器。\n请前往账户设置完善您的个人信息。"
 
         try:
-            resend.Emails.send(
+            await resend.Emails.send_async(
                 {
                     "from": self._from_email,
                     "to": email,
@@ -82,5 +86,4 @@ class EmailService:
             )
         except Exception as e:
             # 欢迎邮件失败不影响登录流程，只记录日志
-            import logging
-            logging.warning(f"OAuth 欢迎邮件发送失败：{e}")
+            logger.warning(f"OAuth 欢迎邮件发送失败：{e}")
