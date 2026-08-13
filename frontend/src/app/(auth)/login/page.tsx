@@ -18,10 +18,16 @@ import { OAuthButtons } from "@/components/auth/OAuthButtons";
 export default function LoginPage() {
   const t = useTranslations("auth.login");
   const router = useRouter();
-  const { login, loading, error } = useAuth();
+  const { login, loading, error, user } = useAuth();
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (!loading && user) {
+      router.replace(user.username ? "/app" : "/welcome");
+    }
+  }, [loading, user, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

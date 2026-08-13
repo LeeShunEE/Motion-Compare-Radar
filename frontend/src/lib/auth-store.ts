@@ -151,15 +151,13 @@ export async function registerWithCode(email: string, code: string): Promise<boo
       loading: false,
       error: null,
     };
-    // 返回是否是新用户
+    notify();
     return tokens.is_new_user ?? false;
   } catch (e: unknown) {
     _state = { ..._state, loading: false, error: e instanceof Error ? e.message : "Registration failed" };
     notify();
     throw e;
   }
-  notify();
-  return false;
 }
 
 /** OAuth 登录：发起授权流程。 */
@@ -198,15 +196,13 @@ export async function handleOAuthCallback(
       loading: false,
       error: null,
     };
-    // 返回是否是新用户（首次登录自动注册）
+    notify();
     return tokens.is_new_user ?? false;
   } catch (e: unknown) {
     _state = { ..._state, loading: false, error: e instanceof Error ? e.message : "OAuth login failed" };
     notify();
     throw e;
   }
-  notify();
-  return false;
 }
 
 /** 设置用户名（OAuth 用户首次登录后设置）。 */

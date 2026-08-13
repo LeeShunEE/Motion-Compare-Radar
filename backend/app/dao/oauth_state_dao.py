@@ -1,11 +1,12 @@
 """OAuth state（CSRF nonce）数据访问对象。
 
 只暴露「创建」与「一次性消费」两个操作；``*ORM`` 不越出本层。
+消费用原子 DELETE … RETURNING，避免并发双读同一行。
 """
 
 from datetime import datetime
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dao.orm import OAuthStateORM
@@ -28,10 +29,10 @@ class OAuthStateDAO:
         await self._session.commit()
 
     async def consume(self, *, state: str, provider: str, now: datetime) -> bool:
-        """一次性消费 state：命中且未过期则删除并返回 True，否则 False。
+        """一次性消费 state：原子删除该行，再校验 provider 与过期。
 
-        无论命中与否都删除该 state（命中即焚；不命中本就不存在），
-        确保单个 state 不可重放。
+        用 DELETE … RETURNING，避免 SELECT + DELETE 之间两个请求都读到同一行。
+        命中即焚：只要 state 存在就删；provider 不匹配或已过期返回 False。
 
         Args:
             state: 回调带回的 state
@@ -41,18 +42,18 @@ class OAuthStateDAO:
         Returns:
             校验是否通过
         """
-        stmt = select(OAuthStateORM).where(OAuthStateORM.state == state)
-        orm = (await self._session.execute(stmt)).scalar_one_or_none()
-
-        if orm is None:
-            return False
-
-        # 命中即焚，避免重放
-        await self._session.execute(
-            delete(OAuthStateORM).where(OAuthStateORM.id == orm.id)
+        stmt = (
+            delete(OAuthStateORM)
+            .where(OAuthStateORM.state == state)
+            .returning(OAuthStateORM.provider, OAuthStateORM.expires_at)
         )
+        result = await self._session.execute(stmt)
+        row = result.one_or_none()
         await self._session.commit()
 
-        if orm.provider != provider:
+        if row is None:
             return False
-        return ensure_utc(orm.expires_at) >= now
+        row_provider, expires_at = row
+        if row_provider != provider:
+            return False
+        return ensure_utc(expires_at) >= now

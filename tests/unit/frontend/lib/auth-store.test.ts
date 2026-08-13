@@ -178,6 +178,18 @@ describe("auth-store", () => {
       expect(getAuthState().error).toBe("验证码错误");
     });
 
+    it("registerWithCode 成功后通知订阅者 loading=false 且带 user", async () => {
+      const snapshots: Array<{ loading: boolean; hasUser: boolean }> = [];
+      const unsub = subscribe((s) => {
+        snapshots.push({ loading: s.loading, hasUser: s.user !== null });
+      });
+
+      await registerWithCode("t@example.com", "123456");
+      unsub();
+
+      expect(snapshots.at(-1)).toEqual({ loading: false, hasUser: true });
+    });
+
     it("resetPassword 重置并自动登录", async () => {
       mswServer.use(
         http.post(`${API_BASE}/api/v1/auth/reset-password`, () =>
@@ -263,6 +275,28 @@ describe("auth-store", () => {
       );
       await expect(handleOAuthCallback("google", "c", "bad")).rejects.toThrow("state 不匹配");
       expect(getAuthState().error).toBeTruthy();
+    });
+
+    it("handleOAuthCallback 成功后通知订阅者 loading=false 且带 user", async () => {
+      mswServer.use(
+        http.get(`${API_BASE}/api/v1/auth/oauth/google/callback`, () =>
+          HttpResponse.json({
+            access_token: "a",
+            refresh_token: "r",
+            token_type: "bearer",
+            is_new_user: false,
+          }),
+        ),
+      );
+      const snapshots: Array<{ loading: boolean; hasUser: boolean }> = [];
+      const unsub = subscribe((s) => {
+        snapshots.push({ loading: s.loading, hasUser: s.user !== null });
+      });
+
+      await handleOAuthCallback("google", "code1", "state1");
+      unsub();
+
+      expect(snapshots.at(-1)).toEqual({ loading: false, hasUser: true });
     });
   });
 });
