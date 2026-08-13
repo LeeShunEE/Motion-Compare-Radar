@@ -213,7 +213,7 @@ class TestResetPassword:
         assert resp.status_code == 400
         assert resp.json()["code"] == "verification_code_invalid"
 
-    def test_reset_password_unknown_email_404(
+    def test_reset_send_code_unknown_email_is_silent(
         self,
         client: TestClient,
         captured_codes: list[str],
@@ -221,18 +221,22 @@ class TestResetPassword:
     ):
         monkeypatch.setattr(settings, "verification_code_cooldown_seconds", 0)
         email = "ghost@example.com"
-        client.post(
+
+        send = client.post(
             "/api/v1/auth/send-code",
             json={"email": email, "purpose": "reset_password"},
         )
-        code = captured_codes[-1]
+        assert send.status_code == 200
+        assert send.json() == {"message": "验证码已发送"}
+        assert captured_codes == []
+
         resp = client.post(
             "/api/v1/auth/reset-password",
             json={
                 "email": email,
-                "code": code,
+                "code": "123456",
                 "new_password": "brandnew1",
             },
         )
-        assert resp.status_code == 404
-        assert resp.json()["code"] == "user_not_found"
+        assert resp.status_code == 400
+        assert resp.json()["code"] == "verification_code_invalid"

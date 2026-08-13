@@ -1,5 +1,7 @@
 """认证路由：验证码发送、注册、登录、刷新、当前用户、OAuth。"""
 
+import logging
+
 from fastapi import APIRouter, HTTPException, status
 
 from app.api.deps import CurrentUserDep, SessionDep
@@ -33,6 +35,8 @@ from app.service.verification_service import VerificationService
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
+logger = logging.getLogger(__name__)
+
 
 def _issue_tokens(user_id: int, *, is_new_user: bool = False) -> TokenResponse:
     subject = str(user_id)
@@ -49,7 +53,12 @@ async def send_verification_code(
     session: SessionDep,
 ) -> dict[str, str]:
     """发送邮箱验证码。"""
-    # 生成验证码
+    if payload.purpose == "reset_password":
+        # 静默校验：不存在则不生码、不发邮件，统一回"已发送"，不泄露是否注册
+        if not await UserService(session).exists_by_email(payload.email):
+            logger.info("reset code skipped, email not registered")
+            return {"message": "验证码已发送"}
+
     verification_service = VerificationService(session)
     code = await verification_service.generate_code(payload.email, payload.purpose)
 
