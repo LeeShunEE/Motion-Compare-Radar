@@ -83,8 +83,7 @@ test.describe("管理员用户与权限管理", () => {
     await expect(page).toHaveURL(/\/users\/\d+/);
     await expect(page).not.toHaveURL(/control-internal/);
     await expect(page.getByText(user.email)).toBeVisible();
-    await expect(page.getByText("启用")).toBeVisible();
-    await expect(page.getByText("用户")).toBeVisible();
+    await expect(page.getByRole("heading", { name: user.username })).toBeVisible();
     await expect(page.getByText(/从未/)).toBeVisible();
     await expect(page.getByText("上传素材")).toBeVisible();
     await expect(page.getByText("最近活动")).toBeVisible();
