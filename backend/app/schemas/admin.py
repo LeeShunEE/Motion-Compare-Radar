@@ -66,6 +66,7 @@ class AdminUserResponse(BaseModel):
     id: int
     username: str | None
     email: EmailStr
+    display_name: str | None = None
     is_verified: bool
     is_admin: bool
     is_active: bool
@@ -78,6 +79,7 @@ class AdminUserResponse(BaseModel):
             id=user.id,
             username=user.username,
             email=user.email,
+            display_name=user.display_name,
             is_verified=user.is_verified,
             is_admin=user.is_admin,
             is_active=user.is_active,

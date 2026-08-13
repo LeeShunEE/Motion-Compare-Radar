@@ -71,3 +71,24 @@ def test_user_activity_includes_actor_and_subject_events(
         before_id=None,
         limit=20,
     )
+
+
+def test_audit_events_forward_involved_user_id(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    dao = MagicMock()
+    dao.list = AsyncMock(return_value=[])
+    monkeypatch.setattr(audit_router_module, "AuditEventDAO", lambda _session: dao)
+
+    response = client.get("/api/v1/admin/audit-events?involved_user_id=9&limit=20")
+
+    assert response.status_code == 200
+    dao.list.assert_awaited_once_with(
+        actor_user_id=None,
+        subject_user_id=None,
+        involved_user_id=9,
+        action=None,
+        success=None,
+        before_id=None,
+        limit=20,
+    )

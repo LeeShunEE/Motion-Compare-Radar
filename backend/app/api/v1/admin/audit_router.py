@@ -19,6 +19,7 @@ async def list_audit_events(
     *,
     actor_user_id: int | None = None,
     subject_user_id: int | None = None,
+    involved_user_id: int | None = None,
     action: AuditAction | None = None,
     success: bool | None = None,
     before_id: int | None = None,
@@ -27,6 +28,7 @@ async def list_audit_events(
     events = await AuditEventDAO(session).list(
         actor_user_id=actor_user_id,
         subject_user_id=subject_user_id,
+        involved_user_id=involved_user_id,
         action=action,
         success=success,
         before_id=before_id,

@@ -138,8 +138,10 @@ describe("admin api client", () => {
     expect(fetchMock.mock.calls.at(-1)![0]).toContain("success=false");
     await admin.listAuditEvents();
     expect(fetchMock.mock.calls.at(-1)![0]).toContain("limit=50");
-    await admin.listUserActivity(9, 4);
+    await admin.listUserActivity(9, { beforeId: 4 });
     expect(fetchMock.mock.calls.at(-1)![0]).toContain("before_id=4");
+    await admin.listAuditEvents({ involvedUserId: 9 });
+    expect(fetchMock.mock.calls.at(-1)![0]).toContain("involved_user_id=9");
     await admin.listUserActivity(9);
     expect(fetchMock.mock.calls.at(-1)![0]).toMatch(/activity$/);
   });

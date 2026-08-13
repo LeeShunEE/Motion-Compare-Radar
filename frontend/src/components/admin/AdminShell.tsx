@@ -1,6 +1,5 @@
 "use client";
 
-import React from "react";
 import {
   Activity,
   AudioLines,
@@ -11,6 +10,8 @@ import {
 } from "lucide-react";
 
 import { useAuth } from "@/contexts/AuthContext";
+import { useAdminBasePath } from "@/hooks/admin/useAdminBasePath";
+import { adminHref } from "@/lib/admin-path";
 
 const sections = [
   { href: "", label: "系统总览", icon: LayoutDashboard },
@@ -21,17 +22,9 @@ const sections = [
   { href: "system", label: "系统状态", icon: Gauge },
 ] as const;
 
-function runtimeBasePath(): string {
-  if (typeof window === "undefined") return "";
-  const firstSegment = window.location.pathname.split("/").filter(Boolean)[0];
-  return firstSegment ? `/${firstSegment}` : "";
-}
-
 export function AdminShell({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
-  const [basePath, setBasePath] = React.useState("");
-
-  React.useEffect(() => setBasePath(runtimeBasePath()), []);
+  const basePath = useAdminBasePath();
 
   return (
     <div className="min-h-screen bg-[#08111f] text-slate-100 lg:grid lg:grid-cols-[17rem_1fr]">
@@ -45,7 +38,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           {sections.map(({ href, label, icon: Icon }) => (
             <a
               key={href}
-              href={basePath ? `${basePath}${href ? `/${href}` : ""}` : "#"}
+              href={adminHref(basePath, href)}
               className="flex min-h-11 items-center gap-3 border border-transparent px-3 py-2 text-sm text-slate-300 transition-colors hover:border-cyan-300/20 hover:bg-cyan-300/5 hover:text-cyan-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
             >
               <Icon aria-hidden="true" className="size-4 text-cyan-400" />

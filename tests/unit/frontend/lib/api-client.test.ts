@@ -409,8 +409,12 @@ describe("api-client", () => {
       expect(mockFetch.mock.calls.at(-1)![0]).toContain("before_id=12");
       expect(mockFetch.mock.calls.at(-1)![0]).toContain("success=false");
       mockFetch.mockResolvedValueOnce(ok({ items: [], next_cursor: null }));
-      await admin.listUserActivity(9, 4);
+      await admin.listUserActivity(9, { beforeId: 4, limit: 20 });
       expect(mockFetch.mock.calls.at(-1)![0]).toContain("users/9/activity?before_id=4");
+      expect(mockFetch.mock.calls.at(-1)![0]).toContain("limit=20");
+      mockFetch.mockResolvedValueOnce(ok({ items: [], next_cursor: null }));
+      await admin.listAuditEvents({ involvedUserId: 9 });
+      expect(mockFetch.mock.calls.at(-1)![0]).toContain("involved_user_id=9");
     });
 
     it("uses stable defaults for unfiltered pages", async () => {

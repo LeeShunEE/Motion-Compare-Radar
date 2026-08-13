@@ -4,7 +4,8 @@ import React from "react";
 
 import { admin, type AdminAuditEvent } from "@/lib/api-client";
 
-export function useAuditEvents() {
+export function useAuditEvents(initial: { involvedUserId?: number } = {}) {
+  const involvedUserId = initial.involvedUserId;
   const [events, setEvents] = React.useState<AdminAuditEvent[]>([]);
   const [nextCursor, setNextCursor] = React.useState<number | null>(null);
   const [action, setAction] = React.useState("");
@@ -16,7 +17,12 @@ export function useAuditEvents() {
     setLoading(true);
     setError(null);
     try {
-      const page = await admin.listAuditEvents({ beforeId, action: action || undefined, success });
+      const page = await admin.listAuditEvents({
+        beforeId,
+        action: action || undefined,
+        success,
+        involvedUserId,
+      });
       setEvents((current) => beforeId === undefined ? page.items : [...current, ...page.items]);
       setNextCursor(page.next_cursor);
     } catch (caught) {
@@ -24,7 +30,7 @@ export function useAuditEvents() {
     } finally {
       setLoading(false);
     }
-  }, [action, success]);
+  }, [action, success, involvedUserId]);
 
   React.useEffect(() => {
     void load();

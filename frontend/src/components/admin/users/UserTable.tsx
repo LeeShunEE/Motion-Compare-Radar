@@ -3,12 +3,12 @@
 import React from "react";
 import { ShieldCheck, ShieldOff, UserRoundCheck, UserRoundX } from "lucide-react";
 
+import { useAdminBasePath } from "@/hooks/admin/useAdminBasePath";
 import type { AdminUser } from "@/lib/api-client";
+import { adminHref } from "@/lib/admin-path";
 
-function userHref(userId: number): string {
-  if (typeof window === "undefined") return "#";
-  const base = window.location.pathname.split("/").filter(Boolean)[0];
-  return base ? `/${base}/users/${userId}` : "#";
+function hasDisplayName(value: string | null | undefined): value is string {
+  return value != null && value !== "";
 }
 
 export function UserTable({
@@ -23,6 +23,7 @@ export function UserTable({
   onStatusChange: (userId: number, isActive: boolean) => Promise<void>;
 }) {
   const [actionError, setActionError] = React.useState<string | null>(null);
+  const base = useAdminBasePath();
 
   const act = async (message: string, action: () => Promise<void>) => {
     if (!window.confirm(message)) return;
@@ -47,11 +48,16 @@ export function UserTable({
         <tbody>
           {users.map((user) => (
             <tr key={user.id} className="border-b border-cyan-100/5 last:border-0">
-              <td className="px-4 py-4"><a className="font-medium text-cyan-100 hover:text-cyan-300" href={userHref(user.id)}>{user.username ?? `用户 #${user.id}`}</a><p className="mt-1 text-xs text-slate-500">{user.email}</p></td>
+              <td className="px-4 py-4">
+                <a className="font-medium text-cyan-100 hover:text-cyan-300" href={adminHref(base, `users/${user.id}`)}>{user.username ?? `用户 #${user.id}`}</a>
+                {hasDisplayName(user.display_name) && <p className="mt-1 text-xs text-slate-400">{user.display_name}</p>}
+                <p className="mt-1 text-xs text-slate-500">{user.email}</p>
+              </td>
               <td><span className={user.is_active ? "text-emerald-300" : "text-red-300"}>{user.is_active ? "启用" : "停用"}</span></td>
               <td>{user.is_admin ? "管理员" : "用户"}</td>
               <td className="font-mono text-xs text-slate-400">{user.last_login_at ? new Date(user.last_login_at).toLocaleString() : "从未"}</td>
               <td className="px-4"><div className="flex justify-end gap-2">
+                <a className="border border-cyan-200/20 px-2 py-2 text-xs text-cyan-100 hover:bg-cyan-300/10" href={adminHref(base, `users/${user.id}`)} aria-label={`查看 ${user.email} 的详情`}>查看详情</a>
                 <button type="button" aria-label={user.is_admin ? `撤销 ${user.email} 管理员` : `授予 ${user.email} 管理员`} className="border border-cyan-200/20 p-2 text-cyan-200" onClick={() => void act(user.is_admin ? "确认撤销该用户的管理员权限？" : "确认授予该用户管理员权限？", () => onRoleChange(user.id, !user.is_admin))}>{user.is_admin ? <ShieldOff className="size-4" /> : <ShieldCheck className="size-4" />}</button>
                 <button type="button" aria-label={user.is_active ? `停用 ${user.email}` : `启用 ${user.email}`} className="border border-amber-200/20 p-2 text-amber-200" onClick={() => void act(user.is_active ? "确认停用该账号？现有登录将在下一次鉴权时失效。" : "确认重新启用该账号？", () => onStatusChange(user.id, !user.is_active))}>{user.is_active ? <UserRoundX className="size-4" /> : <UserRoundCheck className="size-4" />}</button>
               </div></td>
