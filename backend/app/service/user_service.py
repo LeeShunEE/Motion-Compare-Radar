@@ -19,3 +19,14 @@ class UserService:
         if user is None:
             raise UserNotFoundError(f"用户不存在: id={user_id}")
         return user
+
+    async def exists_by_email(self, email: str) -> bool:
+        """邮箱是否已注册（reset_password 静默校验用，不抛异常）。
+
+        Args:
+            email: 待查询邮箱
+
+        Returns:
+            已注册为 True，否则 False
+        """
+        return await self._dao.exists_by_email(email)
