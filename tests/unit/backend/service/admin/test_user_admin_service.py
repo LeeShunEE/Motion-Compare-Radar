@@ -13,13 +13,20 @@ from app.models.user import User
 from app.service.admin.user_admin_service import UserAdminService
 
 
-def _user(user_id: int, *, is_admin: bool, is_active: bool = True) -> User:
+def _user(
+    user_id: int,
+    *,
+    is_admin: bool,
+    is_active: bool = True,
+    display_name: str | None = None,
+) -> User:
     return User(
         id=user_id,
         username=f"user{user_id}",
         email=f"user{user_id}@example.com",
         is_admin=is_admin,
         is_active=is_active,
+        display_name=display_name,
         created_at=datetime(2026, 1, 1, tzinfo=UTC),
     )
 
@@ -108,7 +115,7 @@ async def test_role_change_rolls_back_when_audit_write_fails() -> None:
 
 async def test_user_detail_aggregates_storage_renders_and_activity() -> None:
     dao = AsyncMock()
-    dao.get_by_id.return_value = _user(9, is_admin=False)
+    dao.get_by_id.return_value = _user(9, is_admin=False, display_name="Alice From Google")
     service = _service(dao, AsyncMock())
     service._render_dao = AsyncMock()
     service._render_dao.list_for_user.return_value = [
@@ -136,6 +143,7 @@ async def test_user_detail_aggregates_storage_renders_and_activity() -> None:
     assert detail.usage.render_success_rate == 0.5
     assert detail.usage.activity_count == 14
     assert detail.usage.storage_partial is False
+    assert detail.user.display_name == "Alice From Google"
 
 
 async def test_user_detail_marks_storage_scan_as_partial() -> None:

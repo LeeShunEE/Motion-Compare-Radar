@@ -1,21 +1,34 @@
 "use client";
 
-import React from "react";
 import { useParams } from "next/navigation";
 
+import { UserActivityPanel } from "@/components/admin/users/UserActivityPanel";
 import { UserDetail } from "@/components/admin/users/UserDetail";
-import { admin, type AdminUserDetail } from "@/lib/api-client";
+import { useAdminBasePath } from "@/hooks/admin/useAdminBasePath";
+import { useAdminUser } from "@/hooks/admin/useAdminUser";
+import { adminHref } from "@/lib/admin-path";
 
 export default function AdminUserDetailPage() {
   const params = useParams<{ userId: string }>();
-  const [detail, setDetail] = React.useState<AdminUserDetail | null>(null);
-  const [error, setError] = React.useState<string | null>(null);
-  React.useEffect(() => {
-    const userId = Number(params.userId);
-    if (!Number.isInteger(userId)) { setError("用户编号无效"); return; }
-    admin.getUser(userId).then(setDetail).catch((caught: unknown) => setError(caught instanceof Error ? caught.message : "用户详情加载失败"));
-  }, [params.userId]);
-  if (error) return <p role="alert" className="text-red-200">{error}</p>;
-  if (!detail) return <p className="text-slate-500">正在汇总用户指标…</p>;
-  return <UserDetail detail={detail} />;
+  const parsed = Number(params.userId);
+  const userId = Number.isInteger(parsed) ? parsed : null;
+  const { detail, error } = useAdminUser(userId);
+  const base = useAdminBasePath();
+
+  if (userId === null) return <p role="alert" className="text-red-200">用户编号无效</p>;
+  return (
+    <div className="space-y-6">
+      <a className="text-sm text-cyan-200 hover:text-cyan-100" href={adminHref(base, "users")}>
+        返回用户列表
+      </a>
+      {error && <p role="alert" className="text-red-200">{error}</p>}
+      {!error && !detail && <p className="text-slate-500">正在汇总用户指标…</p>}
+      {detail && (
+        <>
+          <UserDetail detail={detail} />
+          <UserActivityPanel userId={userId} />
+        </>
+      )}
+    </div>
+  );
 }

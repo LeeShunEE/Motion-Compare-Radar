@@ -358,6 +358,7 @@ export interface AdminAsset {
 export interface AdminUser {
   id: number;
   username: string | null;
+  display_name?: string | null;
   email: string;
   is_verified: boolean;
   is_admin: boolean;
@@ -555,17 +556,32 @@ export const admin = {
       method: "PATCH",
       body: JSON.stringify({ is_active: isActive }),
     }),
-  listAuditEvents: (options: { beforeId?: number; limit?: number; action?: string; success?: boolean } = {}) => {
+  listAuditEvents: (options: {
+    beforeId?: number;
+    limit?: number;
+    action?: string;
+    success?: boolean;
+    involvedUserId?: number;
+  } = {}) => {
     const query = new URLSearchParams();
     if (options.beforeId !== undefined) query.set("before_id", String(options.beforeId));
     if (options.action) query.set("action", options.action);
     if (options.success !== undefined) query.set("success", String(options.success));
+    if (options.involvedUserId !== undefined) query.set("involved_user_id", String(options.involvedUserId));
     query.set("limit", String(options.limit ?? 50));
     return authFetch<AdminAuditEventList>(`/api/v1/admin/audit-events?${query}`);
   },
-  listUserActivity: (userId: number, beforeId?: number) => {
-    const query = beforeId === undefined ? "" : `?before_id=${beforeId}`;
-    return authFetch<AdminAuditEventList>(`/api/v1/admin/users/${userId}/activity${query}`);
+  listUserActivity: (
+    userId: number,
+    options: { beforeId?: number; limit?: number } = {},
+  ) => {
+    const query = new URLSearchParams();
+    if (options.beforeId !== undefined) query.set("before_id", String(options.beforeId));
+    if (options.limit !== undefined) query.set("limit", String(options.limit));
+    const qs = query.toString();
+    return authFetch<AdminAuditEventList>(
+      `/api/v1/admin/users/${userId}/activity${qs ? `?${qs}` : ""}`,
+    );
   },
   activeRenders: () => authFetch<AdminActiveRenderList>("/api/v1/admin/render/active"),
   renderHistory: (filters: { userId?: number; status?: string; mode?: string; codec?: string; page?: number; pageSize?: number } = {}) => {
