@@ -1,5 +1,6 @@
 """OAuthStateDAO 单元测试：用 in-memory SQLite 验证一次性消费与过期/不匹配拒绝。"""
 
+import asyncio
 from collections.abc import AsyncGenerator
 from datetime import UTC, datetime, timedelta
 
@@ -11,14 +12,19 @@ from app.dao.orm import Base
 
 
 @pytest.fixture
-async def session() -> AsyncGenerator[AsyncSession, None]:
-    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
-    async with engine.begin() as conn:
+async def engine():
+    eng = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with eng.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    yield eng
+    await eng.dispose()
+
+
+@pytest.fixture
+async def session(engine) -> AsyncGenerator[AsyncSession, None]:
     factory = async_sessionmaker(engine, expire_on_commit=False)
     async with factory() as s:
         yield s
-    await engine.dispose()
 
 
 def _future() -> datetime:
@@ -65,3 +71,21 @@ class TestConsume:
         assert not await dao.consume(
             state="s1", provider="google", now=datetime.now(tz=UTC)
         )
+
+    async def test_concurrent_consume_only_one_succeeds(self, engine) -> None:
+        factory = async_sessionmaker(engine, expire_on_commit=False)
+        async with factory() as setup:
+            await OAuthStateDAO(setup).create(
+                state="s1", provider="google", expires_at=_future()
+            )
+
+        now = datetime.now(tz=UTC)
+
+        async def consume_once() -> bool:
+            async with factory() as s:
+                return await OAuthStateDAO(s).consume(
+                    state="s1", provider="google", now=now
+                )
+
+        results = await asyncio.gather(consume_once(), consume_once())
+        assert sorted(results) == [False, True]
