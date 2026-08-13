@@ -12,10 +12,32 @@ export const __router = {
   refresh: vi.fn(),
 };
 
+export const __params: Record<string, string> = {};
+
+let __searchParams = new URLSearchParams();
+
+export function __setSearchParams(query: string): void {
+  __searchParams = new URLSearchParams(query);
+}
+
+export function __resetNavigationMocks(): void {
+  __router.push.mockReset();
+  __router.replace.mockReset();
+  __router.refresh.mockReset();
+  for (const key of Object.keys(__params)) {
+    delete __params[key];
+  }
+  __searchParams = new URLSearchParams();
+}
+
 export function useRouter() {
   return __router;
 }
 
 export function useSearchParams() {
-  return new URLSearchParams();
+  return __searchParams;
+}
+
+export function useParams() {
+  return __params;
 }
