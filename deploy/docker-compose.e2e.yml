@@ -14,9 +14,42 @@ services:
       # testenv 必须连接真实 PostgreSQL；仅本地开发 override 使用 SQLite。
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-radar}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@db:5432/${POSTGRES_DB:-radar_chart}
       RENDER_CALLBACK_TOKEN_SECRET_STRING: ${RENDER_CALLBACK_TOKEN:?RENDER_CALLBACK_TOKEN is required}
+
+  # ──────────────────────────────────────────────────────────────────────
+  # public-assets-init：一次性容器，在 frontend / render-worker 挂载
+  # public_assets 卷之前，先把卷内子目录建好，从根上消除空卷 copy-up 竞态。
+  #
+  # 背景：E2E 每个 run 用全新空卷（E2E_RESOURCE_PREFIX 隔离）。frontend 镜像
+  # （COPY frontend/ ./）与 render-worker 镜像（COPY frontend/public ./public）
+  # 都在 /app/public 下含 silhouettes/ 目录。两个服务被同一条 `up -d` 并发
+  # Creating 时，Docker 对同一空卷的 volume copy-up 会同时 mkdir silhouettes
+  # → "file exists" 失败（run 31661514078，死在 Start testenv stack，Playwright
+  # 一行没跑到）。
+  #
+  # 这里先把卷弄成「非空」：frontend / worker 挂载时 Docker 即跳过 copy-up，
+  # 不再并发创建 silhouettes 目录。E2E 的 public 资产由 Seed 步骤 / admin
+  # 上传注入，不依赖镜像 copy-up 搬运的内置文件（silhouettes/*.png|jpg 与
+  # music/*.flac 均被 gitignore，镜像里仅有 .gitkeep 占位），故跳过 copy-up
+  # 对测试零副作用。
+  # ──────────────────────────────────────────────────────────────────────
+  public-assets-init:
+    image: alpine:3.20
+    volumes:
+      - public_assets:/work/public_assets
+    command: ["sh", "-c", "mkdir -p /work/public_assets/silhouettes /work/public_assets/music"]
+    restart: "no"
+
+  frontend:
+    depends_on:
+      public-assets-init:
+        condition: service_completed_successfully
+
   render-worker:
     environment:
       RENDER_CALLBACK_TOKEN: ${RENDER_CALLBACK_TOKEN:?RENDER_CALLBACK_TOKEN is required}
+    depends_on:
+      public-assets-init:
+        condition: service_completed_successfully
 
 volumes:
   postgres_data:
