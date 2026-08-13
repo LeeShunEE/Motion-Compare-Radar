@@ -7,9 +7,9 @@
  */
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { getAuthState, handleOAuthCallback } from "@/lib/auth-store";
 import { Card } from "@/components/ui/card";
 
@@ -17,20 +17,28 @@ export default function OAuthCallbackPage() {
   const t = useTranslations("auth.callback");
   const router = useRouter();
   const searchParams = useSearchParams();
+  const params = useParams();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const processedRef = useRef(false);
 
   useEffect(() => {
     const processCallback = async () => {
-      const provider = window.location.pathname.split("/").pop() || "";
+      if (processedRef.current) {
+        return;
+      }
+
+      const provider = typeof params.provider === "string" ? params.provider : "";
       const code = searchParams.get("code");
       const state = searchParams.get("state");
 
-      if (!code || !state) {
+      if (!provider || !code || !state) {
         setError(t("missingParams"));
         setLoading(false);
         return;
       }
+
+      processedRef.current = true;
 
       try {
         await handleOAuthCallback(provider, code, state);
@@ -46,7 +54,7 @@ export default function OAuthCallbackPage() {
     };
 
     processCallback();
-  }, [router, searchParams, t]);
+  }, [params, router, searchParams, t]);
 
   return (
     <Card className="p-6 space-y-4">
